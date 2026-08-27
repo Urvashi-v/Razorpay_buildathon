@@ -100,5 +100,22 @@ def test_the_target_and_its_timestamp_are_forbidden_in_features() -> None:
 
 @pytest.mark.parametrize("column", sorted(schema.FORBIDDEN_IN_FEATURES))
 def test_forbidden_columns_are_real_columns(column: str) -> None:
-    """Guards against a typo silently disabling a forbidden-column check."""
-    assert column in schema.RAW_COLUMNS
+    """Guards against a typo silently disabling a forbidden-column check.
+
+    A forbidden column must exist somewhere - either in the benchmark table or in
+    the simulator's latent frame. A misspelled entry would sit in the forbidden
+    set forever, matching nothing and protecting nothing.
+    """
+    assert column in schema.RAW_COLUMNS or column in schema.LATENT_COLUMNS
+
+
+def test_latent_columns_are_all_forbidden() -> None:
+    """Every simulator latent is refused as a feature.
+
+    The true probability is perfect leakage. It exists so calibration can be
+    measured against a known target - one of the few things synthetic data can
+    honestly offer - and it must never reach a model.
+    """
+    for column in (schema.TRUE_RTO_PROBABILITY, schema.LATENT_LOGIT):
+        assert column in schema.FORBIDDEN_IN_FEATURES
+    assert not set(schema.LATENT_COLUMNS) & set(schema.RAW_COLUMNS)

@@ -19,7 +19,20 @@ from rto_sentinel.db.models import (
     OrderOutcomeRecord,
 )
 
-EXPECTED_TABLES = {"orders", "order_outcomes", "decisions", "ops_overrides", "model_runs"}
+EXPECTED_TABLES = {
+    # dataset layer (Phase 2)
+    "dataset_runs",
+    "customers",
+    "addresses",
+    "orders",
+    "order_outcomes",
+    "delivery_events",
+    "simulation_latents",
+    # decision and audit layer (Phase 1)
+    "decisions",
+    "ops_overrides",
+    "model_runs",
+}
 
 
 @pytest.fixture
@@ -55,6 +68,22 @@ def test_orders_table_has_no_column_for_personal_identity() -> None:
     }
     leaked = columns & forbidden
     assert not leaked, f"orders must not store personal identity: {leaked}"
+    assert "customer_hash" in columns
+
+
+def test_customers_table_has_no_column_for_personal_identity() -> None:
+    """Same commitment as `orders`, asserted independently on the dimension table.
+
+    The customer dimension is where a name column would most plausibly be added
+    by someone trying to be helpful, so it gets its own check rather than relying
+    on the one over `orders`.
+    """
+    from rto_sentinel.db.models import Customer
+
+    columns = set(Customer.__table__.columns.keys())
+    forbidden = {"customer_name", "first_name", "last_name", "phone", "email", "gender", "age"}
+    leaked = columns & forbidden
+    assert not leaked, f"customers must not store personal identity: {leaked}"
     assert "customer_hash" in columns
 
 

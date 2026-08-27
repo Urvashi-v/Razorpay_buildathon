@@ -3,20 +3,26 @@
 #
 # SPEC: section 03 ("Data strategy") and section 09 ("Defense-only compliance").
 #
-# WHAT THIS IS: a labelled tabular sampler. It emits order metadata rows with a
-# probabilistic RTO label drawn from published aggregate base rates. It does not
-# produce payment credentials, identity documents, or deliverable addresses, and
-# nothing it emits is usable outside this repository's evaluation harness.
+# WHAT THIS IS: a controlled benchmark generator. It emits order records with a
+# probabilistic RTO label drawn from a documented causal simulation whose base
+# rates are anchored to published Indian figures (docs/sources.md).
 #
-# WHAT THE NUMBERS MEAN: base rates are anchored to the public sources listed in
-# docs/sources.md. They calibrate a simulator; they are not a claim about any
-# real merchant's book.
+# WHAT THE LABELS ARE NOT: real-world ground truth. They are simulated outcomes
+# of the process described in docs/simulator.md. Absolute metric values measured
+# on this data are a statement about this simulator, not about production.
 #
-# Phase 1 status: this file is the contract. The generator that consumes it is
-# implemented in Phase 2 (src/rto_sentinel/data/generator.py).
+# WHAT IT DOES NOT PRODUCE: working payment credentials, valid identity
+# documents, deliverable addresses, or anything usable outside this repository's
+# own evaluation harness.
 # =============================================================================
-version: 1
-seed: 20260827          # overridden by RTO_RANDOM_SEED when that env var is set
+version: 2
+
+# Behavioural version of the generative process itself. Bumping this means the
+# process changed and previously generated datasets are not comparable. Only
+# implemented versions are accepted; an unknown value fails loudly.
+generator_version: "1.0.0"
+
+seed: 20260827          # overridden by RTO_RANDOM_SEED or --seed
 
 horizon:
   n_orders: 120000
@@ -27,70 +33,148 @@ horizon:
 # Source: ET Prime Research via Dazeinfo - COD is ~60-65% of Indian e-commerce.
 payment:
   cod_share: 0.62
-  # Probability a customer who initially attempted prepaid falls back to COD.
+  # Probability that an order which began as a prepaid attempt falls back to COD.
   # Modelled because "COD after a failed prepaid attempt" is a spec feature.
   prepaid_failure_to_cod: 0.08
 
 # --- outcome base rates ------------------------------------------------------
 # Sources: GoKwik (~23% blended RTO), Shipway ShipNotes FY25 (~26% COD vs <2%
-# prepaid). These are the marginal targets the generator is calibrated to hit;
-# the causal structure below redistributes risk around them.
+# prepaid). These are the marginal targets the simulator is CALIBRATED to hit:
+# after computing every order's latent logit, a per-payment-method intercept is
+# solved by bisection so the mean predicted probability equals the target. The
+# causal structure below therefore redistributes risk without moving the marginal.
 base_rates:
   rto_given_cod: 0.26
   rto_given_prepaid: 0.018
-  # Tolerance for the calibration self-check in the generator's own test.
-  marginal_tolerance: 0.02
+  marginal_tolerance: 0.02      # asserted by the generator's own validation
 
-# --- latent risk structure ---------------------------------------------------
-# The generator draws a latent risk score as a linear combination of the drivers
-# below, then samples the label. Coefficients are on the logit scale. They are
-# the generator's assumptions, stated openly so a reviewer can attack them - the
-# model is never shown these values.
-causal_drivers:
-  address_quality:        {weight: -1.25, note: "poor address text causes real delivery failure"}
-  prior_rto_rate:         {weight:  1.60, note: "strongest honest signal; as-of order time only"}
-  discount_depth:         {weight:  0.75, note: "deep-discount impulse orders return more"}
-  order_value_zscore:     {weight:  0.35, note: "unusually large orders for that customer"}
-  late_night_order:       {weight:  0.30, note: "low-intent impulse window, 23:00-04:00"}
-  pincode_tier_effect:    {weight:  0.45, note: "tier-3 lanes; audited for disparate impact in eval"}
-  is_new_customer:        {weight:  0.40, note: "no history; tracked as a separate cohort"}
-  time_to_checkout_fast:  {weight:  0.25, note: "seconds from cart to order"}
-  courier_lane_quality:   {weight: -0.50, note: "lane performance, not customer behaviour"}
-
-# --- entity populations ------------------------------------------------------
+# --- customer population -----------------------------------------------------
 customers:
   n_customers: 45000
-  # Long tail: most customers order once, a few order often.
+  # Order counts follow a long tail: most customers order once, a few order often.
+  # Higher alpha means a flatter tail.
   orders_per_customer_alpha: 1.8
-  new_customer_share: 0.34
+  # The raw Pareto tail is unrealistically extreme - it hands a single customer a
+  # double-digit percentage of the merchant's book, which no real store sees.
+  # Activity weights are clipped at this quantile, which keeps a genuine long tail
+  # while removing the implausible head.
+  activity_clip_quantile: 0.99
+  # LATENT customer traits. None of these is ever exposed as a feature - they are
+  # the unobserved heterogeneity that makes the learning task realistic rather
+  # than a deterministic rule waiting to be reverse-engineered.
+  reliability_beta: {a: 6.0, b: 2.2}          # higher = accepts delivery more often
+  address_quality_beta: {a: 3.2, b: 1.8}      # higher = writes fuller addresses
+  prepaid_affinity_beta: {a: 2.0, b: 2.4}     # higher = prefers prepaid
 
+# --- latent risk structure ---------------------------------------------------
+# The simulator draws a latent logit as a linear combination of the drivers
+# below, then samples the label from a Bernoulli at the calibrated probability.
+#
+# These coefficients are the SIMULATOR'S ASSUMPTIONS, stated openly so a reviewer
+# can attack them. No model is ever shown these values, and several of the inputs
+# are latent (see `observable` below) so no model can recover them exactly.
+causal_drivers:
+  address_quality:
+    weight: -1.25
+    observable: partial
+    note: "Latent quality drives the outcome; the model sees only text signals."
+  prior_rto_rate:
+    weight: 1.60
+    observable: true
+    note: "Strongest honest signal. Computed as-of order time, resolved orders only."
+  discount_depth:
+    weight: 0.75
+    observable: true
+    note: "Deep-discount impulse orders return more."
+  order_value_zscore:
+    weight: 0.35
+    observable: true
+    note: "Unusually large orders relative to the customer's own median."
+  late_night_order:
+    weight: 0.30
+    observable: true
+    note: "Low-intent impulse window, 23:00-04:00."
+  pincode_tier_effect:
+    weight: 0.45
+    observable: true
+    note: "Tier-3 lanes. Audited for disparate impact in Phase 4."
+  is_new_customer:
+    weight: 0.40
+    observable: true
+    note: "No history. Tracked as a separate cohort in every evaluation."
+  fast_checkout:
+    weight: 0.25
+    observable: true
+    note: "Very short cart-to-order time."
+  courier_lane_quality:
+    weight: -0.50
+    observable: partial
+    note: "Model sees the courier name, not its latent lane quality."
+  customer_reliability:
+    weight: -1.40
+    observable: false
+    note: "LATENT. Unobserved heterogeneity - the main source of irreducible error."
+  pincode_effect:
+    weight: 1.00
+    observable: false
+    note: "LATENT per-pincode random effect. Only a smoothed empirical rate is
+           ever available as a feature, and that is a noisy estimate of this."
+
+# --- stochastic noise --------------------------------------------------------
+# Without this the task collapses into recovering a deterministic rule. The
+# Bernoulli draw alone is not enough: an unexplained per-order shock is what
+# creates a genuine Bayes-optimal ceiling well below perfect separation.
+noise:
+  logit_sigma: 0.90            # per-order Gaussian shock on the logit
+  pincode_effect_sigma: 0.35   # spread of the latent per-pincode effect
+  label_flip_rate: 0.004       # courier miscoding: a small, symmetric label error
+
+# --- geography ---------------------------------------------------------------
 geography:
-  # Pincodes are synthetic identifiers, not a map of real Indian postcodes.
+  # Pincodes are synthetic six-digit identifiers, not a map of real Indian
+  # postcodes.
   n_pincodes: 2200
   tier_shares: {tier_1: 0.34, tier_2: 0.38, tier_3: 0.28}
-  # Bayesian shrinkage applied to per-pincode RTO priors. SPEC section 04:
-  # raw pincode rate is an income proxy; only smoothed aggregates are permitted.
+  # Additive logit offsets by tier. This is the mechanism the fairness audit
+  # exists to scrutinise: the simulator does make tier-3 riskier on average, and
+  # the question Phase 4 asks is whether a model trained on it transfers cost
+  # onto tier-3 customers beyond what its precision justifies.
+  tier_risk_offset: {tier_1: -0.25, tier_2: 0.05, tier_3: 0.45}
+  # Bayesian shrinkage applied to per-pincode priors when they become features.
+  # SPEC section 04: raw pincode rate is an income proxy.
   shrinkage_prior_strength: 50
   min_support_for_feature: 30
 
 address_quality:
-  # Share of orders whose address text is degraded, by tier. Degradation means
-  # missing house number, no landmark, gibberish tokens, or city/pincode mismatch.
-  degraded_share: {tier_1: 0.08, tier_2: 0.15, tier_3: 0.24}
+  # Additional degradation applied on top of the customer's latent writing
+  # quality, by tier - poorer municipal addressing is a real structural effect.
+  tier_degradation: {tier_1: 0.00, tier_2: 0.08, tier_3: 0.18}
+  # Probability the typed city disagrees with the pincode's city.
+  pincode_city_inconsistency: {tier_1: 0.03, tier_2: 0.06, tier_3: 0.11}
+  # How much a city/pincode mismatch reduces effective deliverability. This is a
+  # CAUSAL penalty, not just a rendered detail: a parcel addressed to the wrong
+  # city genuinely struggles to arrive, and it is one of the most common
+  # structural defects in Indian address data.
+  pincode_city_inconsistency_penalty: 0.35
+  # Customers reuse one home address; occasionally an order goes somewhere else
+  # (a gift, an office). Without this every order would have a unique address and
+  # the address dimension would carry no repeat structure at all.
+  alternate_address_rate: 0.06
 
 catalogue:
   categories:
-    - {name: fashion,      share: 0.34, rto_multiplier: 1.35, margin_rate: 0.42}
-    - {name: electronics,  share: 0.14, rto_multiplier: 0.85, margin_rate: 0.12}
-    - {name: beauty,       share: 0.18, rto_multiplier: 1.05, margin_rate: 0.48}
-    - {name: home,         share: 0.20, rto_multiplier: 0.95, margin_rate: 0.30}
-    - {name: accessories,  share: 0.14, rto_multiplier: 1.20, margin_rate: 0.45}
+    - {name: fashion,     share: 0.34, rto_logit_offset:  0.30, margin_rate: 0.42}
+    - {name: electronics, share: 0.14, rto_logit_offset: -0.18, margin_rate: 0.12}
+    - {name: beauty,      share: 0.18, rto_logit_offset:  0.05, margin_rate: 0.48}
+    - {name: home,        share: 0.20, rto_logit_offset: -0.05, margin_rate: 0.30}
+    - {name: accessories, share: 0.14, rto_logit_offset:  0.18, margin_rate: 0.45}
   order_value:
     distribution: lognormal
-    mu: 6.85              # ~ INR 950 median
+    mu: 6.85              # median around INR 950
     sigma: 0.72
-    min: 149
-    max: 45000
+    min: 149.0
+    max: 45000.0
+  items_per_order_lambda: 1.4
 
 couriers:
   - {name: courier_a, share: 0.32, lane_quality: 0.80}
@@ -98,19 +182,44 @@ couriers:
   - {name: courier_c, share: 0.24, lane_quality: 0.71}
   - {name: courier_d, share: 0.16, lane_quality: 0.55}
 
-# --- label timing ------------------------------------------------------------
+# --- temporal behaviour ------------------------------------------------------
+timing:
+  # Relative order volume by hour. Bimodal - a lunchtime bump and a large evening
+  # peak - with a deliberate late-night tail, because low-intent late-night
+  # impulse purchases are a documented RTO driver.
+  hour_weights: [0.9, 0.6, 0.4, 0.3, 0.3, 0.4, 0.8, 1.4, 2.2, 3.0, 3.6, 4.0,
+                 4.2, 3.8, 3.4, 3.3, 3.6, 4.4, 5.6, 6.6, 6.9, 6.0, 4.2, 2.2]
+  late_night_hours: [23, 0, 1, 2, 3, 4]
+  weekend_uplift: 1.15
+  # Sale days as offsets from start_date. Volume spikes and discounts deepen,
+  # which is how "time-related behaviour" reaches the outcome: sale-day orders
+  # are riskier because they are deeper-discounted and more impulsive, not
+  # because the date itself is a risk factor.
+  sale_days: [14, 45, 46, 47, 78, 109, 140, 141, 142, 171]
+  sale_day_volume_multiplier: 2.4
+  sale_day_discount_uplift: 0.18
+
+# --- fulfilment timeline -----------------------------------------------------
+# Produces the dispatch / attempt / resolution timestamps needed for temporal
+# reasoning, and therefore for label maturity.
+fulfilment:
+  dispatch_lag_hours: {min: 4, max: 36}
+  transit_days: {min: 1, max: 4}
+  # An RTO takes longer: failed attempts, reattempts, then the return leg.
+  rto_extra_days: {min: 2, max: 5}
+  cancellation_rate: 0.012          # cancelled before dispatch; not an RTO
+
+# --- label maturity ----------------------------------------------------------
 # SPEC section 03 rule 5: an order is labelled only once its terminal state is
-# known. Orders whose resolution would fall outside the horizon are excluded
-# rather than optimistically labelled "delivered".
+# known. Orders whose resolution falls beyond the horizon are marked
+# excluded_immature rather than optimistically labelled "delivered".
 label_maturity:
-  resolution_days_min: 5
-  resolution_days_max: 9
+  max_resolution_days: 9
   exclude_unresolved_tail: true
 
 # --- realism anchors ---------------------------------------------------------
-# Public tabular datasets shape marginal distributions (basket size, RFM
-# structure). They never supply an RTO label - that comes from this generator
-# alone. SPEC section 03, "Sources".
+# Public tabular datasets shape marginal distributions only. They never supply an
+# RTO label - that comes from this generator alone. SPEC section 03, "Sources".
 realism_anchors:
   basket_structure_reference: "UCI Online Retail II"
   used_for: ["item_count", "basket_value_shape", "repeat_purchase_cadence"]

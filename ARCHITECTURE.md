@@ -7,9 +7,9 @@ This document defines the components, their responsibilities, and the boundaries
 between them. Where a boundary is enforced by a test rather than by convention,
 the test is named. Where something is not built yet, it says so.
 
-**Status: Phase 1 (architecture and foundations).** The data pipeline, models,
-decision arithmetic, console UI and agent layer are scaffolded with fixed
-interfaces and are not implemented. See [Implementation status](#implementation-status).
+**Status: Phase 2 complete (data layer and benchmark generator).** The models,
+decision arithmetic, console UI and agent layer remain scaffolded with fixed
+interfaces and are not implemented. See [Implementation status](#8-implementation-status).
 
 ---
 
@@ -67,7 +67,8 @@ gracefully. That is the design, not a fallback.
 │   ├── cli.py               # pipeline entry points
 │   ├── configuration/       # typed schemas + validating loader + fingerprint
 │   ├── contracts/           # shared types; bottom of the dependency graph
-│   ├── data/                # generator, validation, as-of joins, splits
+│   ├── data/                # generator, address, validation, as-of, splits,
+│   │                        #   artefacts, pipeline
 │   ├── features/            # one module per family + the assembling pipeline
 │   ├── models/              # ladder rungs 0–5, calibration, artefacts
 │   ├── decision/            # cost model, threshold, policy, engine ◀ AUTHORITY
@@ -78,15 +79,17 @@ gracefully. That is the design, not a fallback.
 │   └── api/                 # FastAPI app, deps, errors, routers
 │
 ├── console/                 # React + TypeScript + Vite merchant console
-├── migrations/              # Alembic
+├── migrations/              # Alembic (initial revision applied to PostgreSQL)
+├── artifacts/datasets/      # generated benchmark datasets (git-ignored)
 ├── tests/
 │   ├── unit/                # contracts, config, settings, refused features
 │   ├── architecture/        # the layering rules, mechanically enforced
 │   ├── api/                 # health, contract surface
-│   ├── db/                  # schema shape and privacy commitments
-│   └── leakage/             # the four leakage tests from the spec
+│   ├── db/                  # schema shape, privacy, and the load round-trip
+│   └── leakage/             # the four leakage tests from the spec (running)
 ├── docker/                  # API and console images
-└── scripts/                 # setup and check
+├── docs/                    # simulator write-up, sources, ADRs
+└── scripts/                 # setup, check, seed_db
 ```
 
 The specification's appendix A3 sketches `src/data/`, `src/models/`, `api/`,
@@ -144,11 +147,28 @@ Safety invariants live in the types:
 
 | Module | Responsibility |
 |---|---|
-| `generator.py` | Synthetic order sampler driven entirely by `generator.yaml` |
-| `schema.py` | The canonical column list and `FORBIDDEN_IN_FEATURES` |
-| `validation.py` | Structural checks on any order table |
-| `asof.py` | As-of joins — the single reviewed implementation of the leakage rule |
-| `splits.py` | Temporal + grouped split assignment, and the test-set seal |
+| `generator.py` | The benchmark simulator, driven entirely by `generator.yaml` |
+| `address.py` | Address rendering (latent → text) and observable signals (text → measurements) |
+| `schema.py` | Canonical columns, `ORDER_TIME_COLUMNS`, `FORBIDDEN_IN_FEATURES`, `LATENT_COLUMNS` |
+| `validation.py` | Ten groups of structural and semantic checks |
+| `asof.py` | As-of joins, plus a brute-force reference and a leakage assertion |
+| `splits.py` | Pool-then-window split assignment, and the test-set seal |
+| `artifacts.py` | Parquet dataset artefacts with a JSON provenance sidecar |
+| `pipeline.py` | generate → validate → split → validate → write, in that fixed order |
+
+**The labels are simulated, not observed.** Everything the generator emits is the
+output of the documented process in [docs/simulator.md](docs/simulator.md). A
+metric measured on this data is a statement about the simulator; it becomes a
+statement about reality only after validation on a real merchant's history.
+
+Three drivers are deliberately **latent** — customer reliability, the per-pincode
+random effect, and (partially) address quality. Together with a per-order
+Gaussian shock and the Bernoulli draw, they create a genuine Bayes-optimal
+ceiling. A model that scores near-perfectly here has found a bug.
+
+The base-rate intercepts are solved by a fixed-point iteration over the whole
+simulation pass rather than in closed form, because the simulation has a real
+feedback loop: a customer's prior RTO rate is an input to their next order's risk.
 
 The as-of rule keys on **resolution** time, not order time. An order placed on
 day 40 that comes back on day 47 was not known to be an RTO on day 42. That
@@ -260,6 +280,8 @@ Five tables: `orders`, `order_outcomes`, `decisions`, `ops_overrides`,
 **The label lives in its own table.** If `outcome` were a column on `orders`, the
 convenient query would be the leaky one. Here the convenient query must reference
 `resolved_at`, so the time constraint becomes the obvious thing to write.
+`is_rto` is nullable because an immature order has no known outcome, and NULL is
+the only honest representation of that.
 
 **The decision log is append-only by construction.** There is no `updated_at`
 column and `DecisionRepository` has no update method. An audit trail that can be
@@ -402,17 +424,25 @@ reviewer to verify that in a minute.
 | Configuration schemas, loader, fingerprint | **Implemented and tested** |
 | Shared contracts + safety invariants | **Implemented and tested** |
 | Settings, secret handling, redaction | **Implemented and tested** |
-| Database schema (5 tables, constraints) | **Implemented and tested** (SQLite; no PostgreSQL run yet) |
+| Benchmark generator (v1.0.0) | **Implemented and tested** |
+| Address rendering and observable signals | **Implemented and tested** |
+| Data validation (10 check groups) | **Implemented and tested** |
+| As-of joins + brute-force reference + leakage guard | **Implemented and tested** |
+| Split assignment (pool-then-window) and test-set seal | **Implemented and tested** |
+| Dataset artefacts (parquet + provenance JSON) | **Implemented and tested** |
+| Database schema, 10 tables, Alembic migration | **Implemented; applied to PostgreSQL** |
+| Dataset bulk loader and read-back queries | **Implemented and tested** |
+| CLI: `config check`, `generate`, `validate`, `db upgrade`, `db stats`, `seed-db` | **Implemented and exercised** |
+| The four spec leakage tests | **Running and passing** (were skipped in Phase 1) |
 | API app, error envelope, `/health`, `/readiness` | **Implemented and tested** |
 | API contract for all 17 endpoints | **Published in OpenAPI**; 15 return 501 |
 | Console shell + live backend status | **Implemented and tested** |
 | Architecture layering tests | **Implemented and passing** |
-| Data generator, validation, as-of, splits | Interfaces fixed — Phase 2 |
-| Cost model, threshold derivation, policy, engine | Interfaces fixed — Phase 2 |
-| Feature families and pipeline | Interfaces fixed — Phase 2 |
-| Ladder rungs 0–5, calibration, artefacts | Interfaces fixed — Phase 3 |
+| Feature families and pipeline | Interfaces fixed — Phase 3 |
+| Ladder rungs 0-5, calibration, artefacts | Interfaces fixed — Phase 3 |
+| Cost model, threshold derivation, policy, engine | Interfaces fixed — Phase 3 |
 | Metrics, economics, bootstrap, fairness, report | Interfaces fixed — Phase 4 |
-| Repositories, initial Alembic revision | Interfaces fixed — Phase 4 |
+| Serving-path repositories (single order, decisions) | Interfaces fixed — Phase 4 |
 | Console: queue, sliders, charts, fairness | Phase 4 |
 | Agent layer (4 jobs + grounding) | Interfaces fixed — Phase 5 |
 | Drift monitoring, outcome loop | Interfaces fixed — Phase 6 |
@@ -434,9 +464,14 @@ explain for a benefit this project does not yet need.
 **Recharts, and only for the console.** The reliability diagram, the PR curve and
 the threshold sweep genuinely need a charting library. Nothing else does.
 
-**No initial Alembic revision yet.** The schema is settled but unexercised
-against live PostgreSQL. A migration history that begins with a correction is
-worse than one that begins a step later. See `migrations/README.md`.
+**Parquet, not CSV, for dataset artefacts.** A CSV round-trip loses exactly the
+two dtypes that matter here: timezone-aware timestamps, and the difference
+between a NULL label and the string `"None"`.
+
+**Customer pools before temporal windows.** The alternative that satisfies both
+split rules — earliest split wins, drop later orders — is badly biased toward
+cold-start customers in validation and test. Measured, not assumed: 43% versus
+87%. See §3.3 and `data/splits.py`.
 
 **501 rather than stubbed responses.** Discussed in §3.10. This is the decision
 most likely to make an early demo look worse and the project look honest.

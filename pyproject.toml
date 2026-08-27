@@ -32,6 +32,10 @@ dependencies = [
   "lightgbm>=4.3,<5",
   "shap>=0.45,<1",
   "scipy>=1.12,<2",
+  # Parquet is the dataset artefact format. A CSV round-trip loses exactly the
+  # two dtypes that matter here: timezone-aware timestamps, and the difference
+  # between a NULL label and the string "None".
+  "pyarrow>=16.0,<24",
   # --- observability ---
   "structlog>=24.1,<26",
 ]

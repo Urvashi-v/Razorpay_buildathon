@@ -73,10 +73,20 @@ class OrderOutcome(StrEnum):
 
 
 class DatasetSplit(StrEnum):
+    """Which part of the experiment a row belongs to.
+
+    The two exclusion values are distinct on purpose. ``EXCLUDED_IMMATURE`` means
+    the outcome is not yet known; ``EXCLUDED_GROUP_PROTOCOL`` means the outcome is
+    known but the row was dropped to keep customers disjoint across splits. They
+    have different causes and different remedies, and collapsing them would hide
+    how much data each rule actually costs.
+    """
+
     TRAIN = "train"
     VALIDATION = "validation"
     TEST = "test"
     EXCLUDED_IMMATURE = "excluded_immature"
+    EXCLUDED_GROUP_PROTOCOL = "excluded_group_protocol"
 
 
 class OverrideDirection(StrEnum):

@@ -210,8 +210,28 @@ class TemporalSplitConfig(_Frozen):
 
 
 class GroupSplitConfig(_Frozen):
+    """How customer disjointness is enforced across the temporal splits."""
+
     key: str
     disjoint_across_splits: bool
+    assignment: Literal["customer_pool"]
+    pool_shares: dict[str, float]
+    pool_salt: str
+
+    @model_validator(mode="after")
+    def _pools_are_well_formed(self) -> GroupSplitConfig:
+        expected = {"train", "validation", "test"}
+        if set(self.pool_shares) != expected:
+            msg = f"pool_shares must name exactly {sorted(expected)}"
+            raise ValueError(msg)
+        total = sum(self.pool_shares.values())
+        if abs(total - 1.0) > 1e-6:
+            msg = f"pool_shares must sum to 1.0, got {total}"
+            raise ValueError(msg)
+        if any(share <= 0 for share in self.pool_shares.values()):
+            msg = "every pool must receive a positive share of customers"
+            raise ValueError(msg)
+        return self
 
 
 class SealingConfig(_Frozen):
@@ -428,34 +448,233 @@ class GeneratorBaseRates(_Frozen):
         return self
 
 
+class BetaParams(_Frozen):
+    """Shape parameters for a Beta-distributed latent trait."""
+
+    a: float = Field(gt=0)
+    b: float = Field(gt=0)
+
+
+class IntRange(_Frozen):
+    min: int
+    max: int
+
+    @model_validator(mode="after")
+    def _ordered(self) -> IntRange:
+        if self.min > self.max:
+            msg = f"range min ({self.min}) exceeds max ({self.max})"
+            raise ValueError(msg)
+        return self
+
+
+class GeneratorCustomers(_Frozen):
+    n_customers: int = Field(gt=0)
+    orders_per_customer_alpha: float = Field(gt=0)
+    activity_clip_quantile: float = Field(gt=0.0, le=1.0)
+    reliability_beta: BetaParams
+    address_quality_beta: BetaParams
+    prepaid_affinity_beta: BetaParams
+
+
+class CausalDriver(_Frozen):
+    """One term in the simulator's latent logit.
+
+    ``observable`` records whether a model could ever see this driver:
+    ``true`` (measured directly), ``partial`` (a noisy proxy is available), or
+    ``false`` (latent, and therefore a source of irreducible error). It is
+    documentation with teeth - ``docs/simulator.md`` is generated against it and
+    the generator asserts at least one driver is unobservable, because a
+    simulation with no hidden state is a deterministic rule in disguise.
+    """
+
+    weight: float
+    observable: Literal["true", "partial", "false"] | bool
+    note: str
+
+    @property
+    def is_latent(self) -> bool:
+        return self.observable is False or self.observable == "false"
+
+
+class GeneratorNoise(_Frozen):
+    logit_sigma: float = Field(ge=0.0)
+    pincode_effect_sigma: float = Field(ge=0.0)
+    label_flip_rate: float = Field(ge=0.0, le=0.2)
+
+
+class GeneratorGeography(_Frozen):
+    n_pincodes: int = Field(gt=0)
+    tier_shares: dict[str, float]
+    tier_risk_offset: dict[str, float]
+    shrinkage_prior_strength: float = Field(gt=0)
+    min_support_for_feature: int = Field(gt=0)
+
+    @model_validator(mode="after")
+    def _shares_sum_to_one(self) -> GeneratorGeography:
+        total = sum(self.tier_shares.values())
+        if abs(total - 1.0) > 1e-6:
+            msg = f"tier_shares must sum to 1.0, got {total}"
+            raise ValueError(msg)
+        missing = set(self.tier_shares) - set(self.tier_risk_offset)
+        if missing:
+            msg = f"tier_risk_offset is missing tiers: {sorted(missing)}"
+            raise ValueError(msg)
+        return self
+
+
+class GeneratorAddressQuality(_Frozen):
+    tier_degradation: dict[str, float]
+    pincode_city_inconsistency: dict[str, float]
+    pincode_city_inconsistency_penalty: float = Field(ge=0.0, le=1.0)
+    alternate_address_rate: float = Field(ge=0.0, le=1.0)
+
+
+class CatalogueCategory(_Frozen):
+    name: str
+    share: float = Field(gt=0.0, le=1.0)
+    rto_logit_offset: float
+    margin_rate: float = Field(ge=0.0, le=1.0)
+
+
+class OrderValueDistribution(_Frozen):
+    distribution: Literal["lognormal"]
+    mu: float
+    sigma: float = Field(gt=0)
+    min: float = Field(gt=0)
+    max: float = Field(gt=0)
+
+    @model_validator(mode="after")
+    def _ordered(self) -> OrderValueDistribution:
+        if self.min >= self.max:
+            msg = "order value min must be below max"
+            raise ValueError(msg)
+        return self
+
+
+class GeneratorCatalogue(_Frozen):
+    categories: list[CatalogueCategory]
+    order_value: OrderValueDistribution
+    items_per_order_lambda: float = Field(gt=0)
+
+    @model_validator(mode="after")
+    def _shares_sum_to_one(self) -> GeneratorCatalogue:
+        total = sum(category.share for category in self.categories)
+        if abs(total - 1.0) > 1e-6:
+            msg = f"category shares must sum to 1.0, got {total}"
+            raise ValueError(msg)
+        return self
+
+
+class CourierConfig(_Frozen):
+    name: str
+    share: float = Field(gt=0.0, le=1.0)
+    lane_quality: float = Field(ge=0.0, le=1.0)
+
+
+class GeneratorTiming(_Frozen):
+    hour_weights: list[float]
+    late_night_hours: list[int]
+    weekend_uplift: float = Field(gt=0)
+    sale_days: list[int]
+    sale_day_volume_multiplier: float = Field(gt=0)
+    sale_day_discount_uplift: float = Field(ge=0.0, le=1.0)
+
+    @model_validator(mode="after")
+    def _hours_are_well_formed(self) -> GeneratorTiming:
+        if len(self.hour_weights) != 24:
+            msg = f"hour_weights must have 24 entries, got {len(self.hour_weights)}"
+            raise ValueError(msg)
+        if any(weight < 0 for weight in self.hour_weights):
+            msg = "hour_weights must be non-negative"
+            raise ValueError(msg)
+        if any(not 0 <= hour <= 23 for hour in self.late_night_hours):
+            msg = "late_night_hours must be in 0-23"
+            raise ValueError(msg)
+        return self
+
+
+class GeneratorFulfilment(_Frozen):
+    dispatch_lag_hours: IntRange
+    transit_days: IntRange
+    rto_extra_days: IntRange
+    cancellation_rate: float = Field(ge=0.0, le=1.0)
+
+
+class GeneratorLabelMaturity(_Frozen):
+    max_resolution_days: int = Field(gt=0)
+    exclude_unresolved_tail: bool
+
+
+class GeneratorRealismAnchors(_Frozen):
+    basket_structure_reference: str
+    used_for: list[str]
+    used_for_labels: bool
+
+
+class GeneratorPayment(_Frozen):
+    cod_share: float = Field(gt=0.0, lt=1.0)
+    prepaid_failure_to_cod: float = Field(ge=0.0, le=1.0)
+
+
 class GeneratorConfig(_Frozen):
     """Parameters for the synthetic order generator.
 
     SPEC section 09 names this as the one component deserving scrutiny. It is a
-    labelled tabular sampler: order metadata plus a probabilistic RTO label drawn
-    from published aggregate base rates. Nothing it emits is usable outside this
-    repository's evaluation harness.
+    controlled benchmark generator: order metadata plus a probabilistic RTO label
+    drawn from the documented causal process in ``docs/simulator.md``, calibrated
+    to published aggregate base rates. Nothing it emits is usable outside this
+    repository's own evaluation harness, and nothing it emits is ground truth
+    about the real world.
     """
 
     version: int
+    generator_version: str
     seed: int
     horizon: GeneratorHorizon
-    payment: dict[str, float]
+    payment: GeneratorPayment
     base_rates: GeneratorBaseRates
-    causal_drivers: dict[str, dict[str, object]]
-    customers: dict[str, object]
-    geography: dict[str, object]
-    address_quality: dict[str, object]
-    catalogue: dict[str, object]
-    couriers: list[dict[str, object]]
-    label_maturity: dict[str, object]
-    realism_anchors: dict[str, object]
+    customers: GeneratorCustomers
+    causal_drivers: dict[str, CausalDriver]
+    noise: GeneratorNoise
+    geography: GeneratorGeography
+    address_quality: GeneratorAddressQuality
+    catalogue: GeneratorCatalogue
+    couriers: list[CourierConfig]
+    timing: GeneratorTiming
+    fulfilment: GeneratorFulfilment
+    label_maturity: GeneratorLabelMaturity
+    realism_anchors: GeneratorRealismAnchors
 
     @model_validator(mode="after")
     def _labels_are_not_borrowed(self) -> GeneratorConfig:
         """Public datasets shape marginals only; they never supply an RTO label."""
-        if self.realism_anchors.get("used_for_labels") is not False:
+        if self.realism_anchors.used_for_labels:
             msg = "realism_anchors.used_for_labels must be false: labels come from this generator"
+            raise ValueError(msg)
+        return self
+
+    @model_validator(mode="after")
+    def _simulation_has_hidden_state(self) -> GeneratorConfig:
+        """At least one driver must be unobservable.
+
+        A simulation whose every driver is visible to the model is a deterministic
+        rule waiting to be reverse-engineered, and a model trained on it reports a
+        score that means nothing. The latent drivers are what create a real
+        Bayes-optimal ceiling.
+        """
+        if not any(driver.is_latent for driver in self.causal_drivers.values()):
+            msg = (
+                "at least one causal driver must be unobservable; otherwise the "
+                "learning task is recovering a deterministic rule"
+            )
+            raise ValueError(msg)
+        return self
+
+    @model_validator(mode="after")
+    def _couriers_are_well_formed(self) -> GeneratorConfig:
+        total = sum(courier.share for courier in self.couriers)
+        if abs(total - 1.0) > 1e-6:
+            msg = f"courier shares must sum to 1.0, got {total}"
             raise ValueError(msg)
         return self
 

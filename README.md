@@ -32,18 +32,24 @@ evaluation report object, and on the console — not only here.
 
 ---
 
-## Current status: Phase 1 of 6
+## Current status: Phase 2 of 6
 
-This repository currently contains **architecture and engineering foundations**.
-The following are implemented, tested, and working:
+**Phase 1** established the architecture. **Phase 2** built the data layer. The
+following are implemented, tested, and working:
 
+- A reproducible **benchmark generator** with a documented causal simulation
+- **PostgreSQL persistence**: 10 tables, Alembic migrations, bulk loader
+- **Data validation**: ten check groups, each one verified to actually fire
+- **As-of joins** with a brute-force reference implementation and a leakage guard
+- **Label maturity**: unresolved orders get a NULL label, never "delivered"
+- **Split protocol**: temporal windows inside disjoint customer pools, sealed test set
+- Dataset artefacts as parquet with a JSON provenance sidecar
+- A CLI covering generate / validate / migrate / seed / query
+- The **four leakage tests the specification promises**, running against real
+  generated data
 - Typed, validating configuration with a content fingerprint
-- Shared contracts carrying the safety invariants
-- Database schema with its privacy commitments
 - FastAPI application with a working `/health` and `/readiness`
-- The full API contract for 17 endpoints, published in OpenAPI
 - A React console that reads live backend status
-- Architecture tests that mechanically enforce the layering rules
 
 The ML models, decision arithmetic, dashboard and agent layer are **scaffolded
 with fixed interfaces and not implemented**. Their endpoints return
@@ -88,7 +94,35 @@ rto-sentinel config check
 That validates every YAML file and prints the configuration fingerprint. It is
 the fastest way to confirm the checkout is sound.
 
-### Run it
+### Generate a benchmark dataset
+
+```bash
+rto-sentinel generate --seed 42 --customers 4000 --orders 12000 --lenient
+```
+
+The same seed and configuration always produce the same data; every dataset
+records its seed, generator version, configuration snapshot and creation time.
+How the simulator works is documented in full in [docs/simulator.md](docs/simulator.md).
+
+### Load it into PostgreSQL
+
+```bash
+docker compose up -d db
+```
+
+```bash
+./scripts/seed_db.sh --customers 4000 --orders 12000 --lenient
+```
+
+That runs migrations, generates, validates, loads, and then queries the row counts
+back out. It **refuses to load a dataset that failed validation** — loading
+known-bad data is worse than having none, because it looks like a working system.
+
+```bash
+rto-sentinel db stats
+```
+
+### Run the API
 
 ```bash
 rto-sentinel serve
@@ -152,13 +186,22 @@ The specification promises four tests a reviewer can run:
 `test_no_future_aggregates`, `test_customer_disjoint_splits`,
 `test_label_maturity`, `test_target_not_in_features`.
 
-They exist in [`tests/leakage/`](tests/leakage/test_leakage_suite.py) with their
-final names and their assertions written out. **They are currently skipped**,
-because the pipeline they test lands in Phase 2 and a test that passed vacuously
-would be worse than not writing it. `pytest` reports them as skipped, visibly.
+They are in [`tests/leakage/`](tests/leakage/test_leakage_suite.py) and they
+**run against real generated data**:
 
-What Phase 1 *can* assert — that the split protocol is configured such that those
-tests will have something real to check — is asserted and passing.
+```bash
+pytest tests/leakage -v
+```
+
+`test_no_future_aggregates` is the interesting one. It rewinds the dataset to a
+cutoff — every order still present, but anything not yet resolved has its outcome
+and resolution timestamp hidden — recomputes the customer-history feature, and
+asserts nothing changed for orders placed before that cutoff. A feature that moves
+when the future is removed was reading the future.
+
+The guard is demonstrably capable of failing: `tests/unit/test_asof.py` points it
+at a deliberately leaky implementation (an expanding mean over orders *placed*
+earlier rather than *resolved* earlier) and asserts it fires.
 
 ---
 
@@ -309,10 +352,23 @@ a key must be present.
 | Document | Contents |
 |---|---|
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Components, boundaries, data flow, security |
+| [docs/simulator.md](docs/simulator.md) | **How the benchmark data is produced**, and what it can and cannot demonstrate |
 | [REPORT.md](REPORT.md) | Results — currently empty, by design |
 | [docs/sources.md](docs/sources.md) | Every market figure, with its citation |
 | [docs/adr/](docs/adr/) | Architecture decision records |
 | [migrations/README.md](migrations/README.md) | Migration workflow |
+
+### Four things kept separate
+
+[docs/simulator.md](docs/simulator.md) opens by distinguishing them, because
+synthetic-data projects routinely blur them together:
+
+| Category | Example | Status |
+|---|---|---|
+| External published assumption | "~26% RTO on COD" (Shipway FY25) | Cited from a public source |
+| Simulator assumption | `prior_rto_rate` weight = 1.60 | This project's choice. Not evidence. |
+| Simulated label | `orders.is_rto` | **Not real-world ground truth** |
+| Measured model result | PR-AUC on the test set | A statement about the simulator |
 
 ---
 

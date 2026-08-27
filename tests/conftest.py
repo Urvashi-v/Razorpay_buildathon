@@ -4,24 +4,32 @@ Two things this file is careful about:
 
 * **No live PostgreSQL.** The suite points ``RTO_DATABASE_URL`` at a temporary
   SQLite file, so ``pytest`` runs on a clean checkout with nothing installed but
-  the Python dependencies. Tests that genuinely need Postgres are marked
+  the Python dependencies. Tests that genuinely need PostgreSQL are marked
   ``requires_db`` and skipped by default.
 * **No API key.** The language layer is explicitly disabled for every test.
   Nothing in this suite makes a network call, and a test that silently started
   billing an Anthropic account would be a bad surprise.
+
+The generated-dataset fixtures are session-scoped. Generation is not free - the
+base-rate calibration runs the whole simulation two or three times - and every
+test that needs a dataset needs the *same* one anyway.
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
+from rto_sentinel.configuration import load_generator_config, load_splits_config
+from rto_sentinel.configuration.schemas import GeneratorConfig, SplitsConfig
+from rto_sentinel.data.generator import ConfiguredOrderGenerator, GenerationResult, GeneratorParams
 from rto_sentinel.settings import REPO_ROOT, Settings, get_settings
 
-# Environment variables that must not leak in from the developer's own shell or
-# a stray .env file and change what the suite is testing.
+# Environment variables that must not leak in from the developer's own shell or a
+# stray .env file and change what the suite is testing.
 _ISOLATED_VARS = (
     "RTO_ENV",
     "RTO_DATABASE_URL",
@@ -30,6 +38,17 @@ _ISOLATED_VARS = (
     "ANTHROPIC_API_KEY",
     "RTO_CONFIG_DIR",
     "RTO_ARTIFACT_DIR",
+)
+
+#: A deliberately small dataset. Big enough that customers accumulate history and
+#: every split is populated; small enough that the suite stays fast.
+SMALL_DATASET = GeneratorParams(
+    seed=1234,
+    generator_version="1.0.0",
+    n_customers=600,
+    n_orders=2000,
+    start_date=datetime(2025, 9, 1, tzinfo=UTC),
+    end_date=datetime(2026, 2, 27, tzinfo=UTC),
 )
 
 
@@ -63,3 +82,25 @@ def repo_root() -> Path:
 @pytest.fixture
 def source_root() -> Path:
     return REPO_ROOT / "src" / "rto_sentinel"
+
+
+# ---------------------------------------------------------------------------
+# generated data
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="session")
+def generator_config() -> GeneratorConfig:
+    """The shipped generator configuration, loaded once."""
+    return load_generator_config(Settings(RTO_CONFIG_DIR=str(REPO_ROOT / "config")))
+
+
+@pytest.fixture(scope="session")
+def splits_config() -> SplitsConfig:
+    return load_splits_config(Settings(RTO_CONFIG_DIR=str(REPO_ROOT / "config")))
+
+
+@pytest.fixture(scope="session")
+def small_dataset(generator_config: GeneratorConfig) -> GenerationResult:
+    """One small generated dataset, shared across the suite."""
+    return ConfiguredOrderGenerator().generate(generator_config, SMALL_DATASET)

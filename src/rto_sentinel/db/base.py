@@ -15,8 +15,9 @@ between engines and make migrations unreviewable.
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import ClassVar
 
-from sqlalchemy import MetaData
+from sqlalchemy import DateTime, MetaData
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 NAMING_CONVENTION = {
@@ -29,9 +30,21 @@ NAMING_CONVENTION = {
 
 
 class Base(DeclarativeBase):
-    """Declarative base for every table in this application."""
+    """Declarative base for every table in this application.
+
+    ``type_annotation_map`` maps every ``datetime`` column to
+    ``TIMESTAMP WITH TIME ZONE``. This is not a stylistic preference. The entire
+    project turns on temporal reasoning - what was knowable at the instant an
+    order was placed - and a naive timestamp column silently discards the offset
+    on write, so a value round-trips as a different instant depending on the
+    server's timezone. An as-of join computed against those is wrong in a way
+    that produces plausible numbers, which is the worst kind of wrong.
+    """
 
     metadata = MetaData(naming_convention=NAMING_CONVENTION)
+    # RUF012 does not know this is a SQLAlchemy declarative hook rather than a
+    # mutable default that instances might share.
+    type_annotation_map: ClassVar[dict[object, object]] = {datetime: DateTime(timezone=True)}
 
 
 def utc_now() -> datetime:

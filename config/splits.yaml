@@ -18,9 +18,29 @@ temporal:
 
 # 2. Group constraint on top: no customer_hash may appear in more than one
 #    split, so the model learns behaviour rather than memorising individuals.
+#
+#    HOW THIS IS RECONCILED WITH RULE 1. Customers are partitioned into disjoint
+#    pools FIRST, by a deterministic hash that has nothing to do with their
+#    behaviour, and the temporal window is then applied within each pool. A
+#    customer therefore contributes only their orders inside their own pool's
+#    window; the rest are dropped as excluded_group_protocol.
+#
+#    The naive alternative - assign each customer to their earliest split and drop
+#    the later orders - satisfies both rules but is badly biased: validation and
+#    test end up composed almost entirely of customers with no training-window
+#    history, i.e. ~88% cold-start against ~43% in train. A threshold fitted on
+#    that measures cold-start performance and nothing else. Pool assignment is
+#    independent of behaviour, so every split keeps the same new/repeat mix.
+#
+#    Pool shares are deliberately not equal to the window shares. The validation
+#    window is only 21 days wide, so its pool is enlarged to keep the split sizes
+#    comparable.
 group:
   key: customer_hash
   disjoint_across_splits: true
+  assignment: customer_pool
+  pool_shares: {train: 0.55, validation: 0.27, test: 0.18}
+  pool_salt: "rto-sentinel-split-v1"
 
 # 3. The test set is sealed. It is scored exactly once, at the end, after the
 #    threshold has been fixed on validation.

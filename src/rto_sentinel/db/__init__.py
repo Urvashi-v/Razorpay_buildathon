@@ -1,20 +1,26 @@
 """Database layer: declarative models, session management, repositories.
 
-Depends on: contracts, settings. Nothing in the ML pipeline imports this package
-- training reads parquet files, not tables - so the model can be retrained
-without a database running, and the database can be migrated without touching the
-pipeline.
+Depends on: contracts, data.schema, settings. Nothing in the ML pipeline imports
+this package - training reads parquet files, not tables - so the model can be
+retrained without a database running, and the database can be migrated without
+touching the pipeline.
 """
 
 from rto_sentinel.db.base import Base, TimestampMixin, utc_now
 from rto_sentinel.db.models import (
+    Address,
+    Customer,
+    DatasetRun,
     Decision,
+    DeliveryEvent,
     ModelRun,
     OpsOverrideRecord,
     Order,
     OrderOutcomeRecord,
+    SimulationLatent,
 )
 from rto_sentinel.db.repositories import (
+    DatasetRepository,
     DecisionRepository,
     OrderRepository,
     OverrideRepository,
@@ -23,9 +29,14 @@ from rto_sentinel.db.repositories import (
 from rto_sentinel.db.session import get_engine, get_session_factory, reset_engine, session_scope
 
 __all__ = [
+    "Address",
     "Base",
+    "Customer",
+    "DatasetRepository",
+    "DatasetRun",
     "Decision",
     "DecisionRepository",
+    "DeliveryEvent",
     "ModelRun",
     "OpsOverrideRecord",
     "Order",
@@ -33,6 +44,7 @@ __all__ = [
     "OrderRepository",
     "OverrideRepository",
     "ReadOnlyRepository",
+    "SimulationLatent",
     "TimestampMixin",
     "get_engine",
     "get_session_factory",

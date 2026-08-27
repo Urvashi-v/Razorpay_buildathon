@@ -3,16 +3,19 @@
 Subcommands mirror the pipeline stages, so the whole system is reproducible from
 a shell without a notebook anywhere in the loop::
 
-    rto-sentinel config check      # validate every YAML file and print the fingerprint
-    rto-sentinel generate          # build the synthetic dataset      (Phase 2)
-    rto-sentinel split             # assign train/validation/test     (Phase 2)
-    rto-sentinel train --rung 4    # train one ladder rung            (Phase 3)
-    rto-sentinel evaluate          # score on validation              (Phase 4)
-    rto-sentinel evaluate --sealed # the single, final test-set run   (Phase 4)
-    rto-sentinel serve             # run the API
+    rto-sentinel config check                 # validate every YAML file
+    rto-sentinel db upgrade                   # run migrations
+    rto-sentinel generate --seed 42 ...       # build the benchmark dataset
+    rto-sentinel validate --run-id ...        # re-validate an artefact
+    rto-sentinel seed-db --seed 42 ...        # migrate, generate, validate, load
+    rto-sentinel db stats --run-id ...        # query the loaded data back
+    rto-sentinel train --rung 4               # train one ladder rung   (Phase 3)
+    rto-sentinel evaluate                     # score a model           (Phase 4)
+    rto-sentinel serve                        # run the API
 
-``config check`` is implemented now, because a configuration that does not parse
-should be discoverable before anything else is built on top of it.
+Every generation records its seed, generator version, configuration snapshot and
+creation timestamp, so any dataset can be traced back to the exact inputs that
+produced it - and regenerated from them.
 """
 
 from __future__ import annotations
@@ -20,10 +23,25 @@ from __future__ import annotations
 import argparse
 import sys
 from collections.abc import Sequence
+from datetime import UTC, datetime, timedelta
 
 from rto_sentinel import __version__
-from rto_sentinel.configuration import ConfigurationError, config_fingerprint, load_app_config
-from rto_sentinel.settings import get_settings
+from rto_sentinel.configuration import (
+    ConfigurationError,
+    config_fingerprint,
+    load_app_config,
+    load_generator_config,
+    load_splits_config,
+)
+from rto_sentinel.data.artifacts import latest_dataset_dir, read_dataset
+from rto_sentinel.data.generator import SUPPORTED_GENERATOR_VERSIONS, GeneratorParams
+from rto_sentinel.data.pipeline import build_dataset
+from rto_sentinel.data.validation import validate_delivery_events, validate_orders
+from rto_sentinel.settings import Settings, get_settings
+
+# ---------------------------------------------------------------------------
+# config
+# ---------------------------------------------------------------------------
 
 
 def _cmd_config_check(_: argparse.Namespace) -> int:
@@ -35,22 +53,241 @@ def _cmd_config_check(_: argparse.Namespace) -> int:
         print(f"configuration invalid:\n{exc}", file=sys.stderr)
         return 1
 
-    fingerprint = config_fingerprint(settings)
     print("configuration OK")
     print(f"  config dir       : {settings.config_path}")
-    print(f"  fingerprint      : {fingerprint}")
+    print(f"  fingerprint      : {config_fingerprint(settings)}")
+    print(f"  generator version: {config.generator.generator_version}")
     print(f"  generator orders : {config.generator.horizon.n_orders:,}")
     print(
         f"  split (days)     : train {config.splits.temporal.train_days}, "
         f"val {config.splits.temporal.validation_days}, "
         f"test {config.splits.temporal.test_days}"
     )
+    print(f"  pool shares      : {config.splits.group.pool_shares}")
     print(f"  feature families : {', '.join(config.features.enabled_families)}")
     print(f"  refused patterns : {len(config.features.refused_patterns)}")
     print(f"  cost profiles    : {', '.join(sorted(config.cost_model.profiles))}")
-    print(f"  default profile  : {config.cost_model.default_profile}")
     print(f"  ladder rungs     : {', '.join(r.name for r in config.ladder.rungs if r.enabled)}")
     print(f"  primary metric   : {config.evaluation.primary_metric}")
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# generation
+# ---------------------------------------------------------------------------
+
+
+def _resolve_params(args: argparse.Namespace, settings: Settings) -> GeneratorParams:
+    """Turn CLI arguments into generator parameters, falling back to config."""
+    generator_config = load_generator_config(settings)
+
+    seed = args.seed if args.seed is not None else settings.random_seed
+    n_customers = (
+        args.customers if args.customers is not None else generator_config.customers.n_customers
+    )
+    n_orders = args.orders if args.orders is not None else generator_config.horizon.n_orders
+    version = (
+        args.generator_version
+        if args.generator_version is not None
+        else generator_config.generator_version
+    )
+
+    if args.start_date is not None:
+        start = datetime.fromisoformat(args.start_date).replace(tzinfo=UTC)
+    else:
+        start = datetime.fromisoformat(generator_config.horizon.start_date).replace(tzinfo=UTC)
+
+    if args.end_date is not None:
+        end = datetime.fromisoformat(args.end_date).replace(tzinfo=UTC)
+    else:
+        end = start + timedelta(days=generator_config.horizon.days - 1)
+
+    return GeneratorParams(
+        seed=seed,
+        generator_version=version,
+        n_customers=n_customers,
+        n_orders=n_orders,
+        start_date=start,
+        end_date=end,
+    )
+
+
+def _cmd_generate(args: argparse.Namespace) -> int:
+    """Generate, validate and write a benchmark dataset."""
+    settings = get_settings()
+    params = _resolve_params(args, settings)
+
+    print(
+        f"generating {params.n_orders:,} orders for {params.n_customers:,} customers "
+        f"over {params.days} days (seed {params.seed}, generator {params.generator_version})"
+    )
+    result = build_dataset(
+        generator_config=load_generator_config(settings),
+        splits_config=load_splits_config(settings),
+        params=params,
+        artifact_root=None if args.no_write else settings.artifact_path,
+        strict=not args.lenient,
+    )
+    print()
+    print(result.render())
+
+    if not result.ok:
+        print(
+            "\nvalidation FAILED; the dataset was written but must not be trusted.", file=sys.stderr
+        )
+        return 1
+    return 0
+
+
+def _cmd_validate(args: argparse.Namespace) -> int:
+    """Re-validate a dataset artefact that is already on disk."""
+    settings = get_settings()
+    directory = (
+        settings.artifact_path / "datasets" / args.run_id
+        if args.run_id
+        else latest_dataset_dir(settings.artifact_path)
+    )
+    if directory is None or not directory.is_dir():
+        print("no dataset artefact found; run `rto-sentinel generate` first.", file=sys.stderr)
+        return 1
+
+    artifact = read_dataset(directory)
+    print(f"validating {directory}")
+    print(f"  generator version : {artifact.metadata.get('generator_version')}")
+    print(f"  seed              : {artifact.metadata.get('seed')}")
+    print(f"  created at        : {artifact.metadata.get('created_at')}")
+    print()
+
+    order_report = validate_orders(
+        artifact.orders,
+        config=load_generator_config(settings),
+        customers=artifact.customers,
+        strict=not args.lenient,
+    )
+    event_report = validate_delivery_events(artifact.delivery_events, artifact.orders)
+    print(order_report.render())
+    print()
+    print(event_report.render())
+
+    return 0 if (order_report.ok and event_report.ok) else 1
+
+
+# ---------------------------------------------------------------------------
+# database
+# ---------------------------------------------------------------------------
+
+
+def _cmd_db_upgrade(_: argparse.Namespace) -> int:
+    """Run Alembic migrations up to head."""
+    from alembic import command
+    from alembic.config import Config
+
+    from rto_sentinel.settings import REPO_ROOT
+
+    settings = get_settings()
+    print(f"migrating {settings.database.safe_url}")
+    alembic_config = Config(str(REPO_ROOT / "alembic.ini"))
+    alembic_config.set_main_option("script_location", str(REPO_ROOT / "migrations"))
+    command.upgrade(alembic_config, "head")
+    print("migrations applied")
+    return 0
+
+
+def _cmd_db_stats(args: argparse.Namespace) -> int:
+    """Query a loaded dataset back out of the database."""
+    from rto_sentinel.db.repositories import DatasetRepository
+    from rto_sentinel.db.session import session_scope
+
+    with session_scope() as session:
+        repository = DatasetRepository(session)
+        runs = repository.list_runs()
+        if not runs:
+            print("no dataset runs are loaded. Run `rto-sentinel seed-db`.", file=sys.stderr)
+            return 1
+
+        run = (
+            next((r for r in runs if r.run_id == args.run_id), runs[0]) if args.run_id else runs[0]
+        )
+
+        print(f"dataset run {run.run_id}")
+        print(f"  generator version  : {run.generator_version}")
+        print(f"  seed               : {run.seed}")
+        print(f"  config fingerprint : {run.config_fingerprint[:16]}...")
+        print(f"  created at         : {run.created_at.isoformat()}")
+        print(f"  horizon            : {run.start_date.date()} to {run.end_date.date()}")
+        print(f"  provenance         : {run.data_provenance}")
+        print()
+        print("row counts (from SQL)")
+        for table, count in repository.table_counts(run.run_id).items():
+            print(f"  {table:<20}: {count:,}")
+        print()
+        print("splits")
+        for split, count in sorted(repository.split_counts(run.run_id).items()):
+            print(f"  {split:<20}: {count:,}")
+        print()
+        print("outcomes")
+        for outcome, count in sorted(repository.outcome_counts(run.run_id).items()):
+            print(f"  {outcome:<20}: {count:,}")
+        print()
+        print("RTO rate by payment method (mature orders only)")
+        for method, rate in sorted(repository.rto_rate_by_payment_method(run.run_id).items()):
+            print(f"  {method:<20}: {rate:.4f}")
+    return 0
+
+
+def _cmd_seed_db(args: argparse.Namespace) -> int:
+    """The full path: migrate, generate, validate, load, verify.
+
+    Refuses to load a dataset that failed validation. Loading known-bad data is
+    worse than having none: it looks like a working system.
+    """
+    from rto_sentinel.db.repositories import DatasetRepository
+    from rto_sentinel.db.session import session_scope
+
+    settings = get_settings()
+
+    if not args.skip_migrations:
+        print("== 1. migrations ==")
+        if _cmd_db_upgrade(args) != 0:
+            return 1
+        print()
+
+    print("== 2. generate ==")
+    params = _resolve_params(args, settings)
+    result = build_dataset(
+        generator_config=load_generator_config(settings),
+        splits_config=load_splits_config(settings),
+        params=params,
+        artifact_root=settings.artifact_path,
+        strict=not args.lenient,
+    )
+    print(result.render())
+    print()
+
+    print("== 3. validate ==")
+    if not result.ok:
+        print("validation failed; refusing to load into the database.", file=sys.stderr)
+        return 1
+    print("validation passed")
+    print()
+
+    print("== 4. load ==")
+    with session_scope() as session:
+        counts = DatasetRepository(session).load(result.dataset)
+    for table, count in counts.items():
+        print(f"  {table:<20}: {count:,}")
+    print()
+
+    print("== 5. verify (queried back from the database) ==")
+    with session_scope() as session:
+        repository = DatasetRepository(session)
+        run_id = result.dataset.metadata.run_id
+        for table, count in repository.table_counts(run_id).items():
+            print(f"  {table:<20}: {count:,}")
+        print()
+        print("  RTO rate by payment method (mature orders only)")
+        for method, rate in sorted(repository.rto_rate_by_payment_method(run_id).items()):
+            print(f"    {method:<18}: {rate:.4f}")
     return 0
 
 
@@ -73,6 +310,31 @@ def _cmd_not_implemented(args: argparse.Namespace) -> int:
     return 2
 
 
+def _add_generation_arguments(parser: argparse.ArgumentParser) -> None:
+    """The generation parameters, shared by `generate` and `seed-db`.
+
+    All optional: each falls back to ``config/generator.yaml``. Whatever is
+    actually used is recorded on the dataset run, so a value taken from config is
+    just as traceable as one passed here.
+    """
+    parser.add_argument("--seed", type=int, default=None, help="random seed (default: from config)")
+    parser.add_argument("--customers", type=int, default=None, help="number of customers")
+    parser.add_argument("--orders", type=int, default=None, help="number of orders")
+    parser.add_argument("--start-date", default=None, help="horizon start, YYYY-MM-DD")
+    parser.add_argument("--end-date", default=None, help="horizon end, YYYY-MM-DD (inclusive)")
+    parser.add_argument(
+        "--generator-version",
+        default=None,
+        choices=sorted(SUPPORTED_GENERATOR_VERSIONS),
+        help="version of the generative process to run",
+    )
+    parser.add_argument(
+        "--lenient",
+        action="store_true",
+        help="downgrade base-rate drift from an error to a warning (small samples)",
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="rto-sentinel",
@@ -83,18 +345,41 @@ def build_parser() -> argparse.ArgumentParser:
 
     config_parser = sub.add_parser("config", help="configuration utilities")
     config_sub = config_parser.add_subparsers(dest="config_command", required=True)
-    check = config_sub.add_parser("check", help="validate all configuration files")
-    check.set_defaults(func=_cmd_config_check)
+    config_sub.add_parser("check", help="validate all configuration files").set_defaults(
+        func=_cmd_config_check
+    )
+
+    generate = sub.add_parser("generate", help="build the synthetic benchmark dataset")
+    _add_generation_arguments(generate)
+    generate.add_argument(
+        "--no-write", action="store_true", help="generate and validate without writing artefacts"
+    )
+    generate.set_defaults(func=_cmd_generate)
+
+    validate = sub.add_parser("validate", help="re-validate a dataset artefact on disk")
+    validate.add_argument("--run-id", default=None, help="dataset run id (default: most recent)")
+    validate.add_argument("--lenient", action="store_true")
+    validate.set_defaults(func=_cmd_validate)
+
+    db_parser = sub.add_parser("db", help="database utilities")
+    db_sub = db_parser.add_subparsers(dest="db_command", required=True)
+    db_sub.add_parser("upgrade", help="run migrations to head").set_defaults(func=_cmd_db_upgrade)
+    stats = db_sub.add_parser("stats", help="query a loaded dataset back")
+    stats.add_argument("--run-id", default=None)
+    stats.set_defaults(func=_cmd_db_stats)
+
+    seed = sub.add_parser("seed-db", help="migrate, generate, validate and load")
+    _add_generation_arguments(seed)
+    seed.add_argument("--skip-migrations", action="store_true")
+    seed.set_defaults(func=_cmd_seed_db)
 
     serve = sub.add_parser("serve", help="run the API")
     serve.add_argument("--host", default=None)
     serve.add_argument("--port", type=int, default=None)
-    serve.add_argument("--reload", action="store_true", help="auto-reload on source changes")
+    serve.add_argument("--reload", action="store_true")
     serve.set_defaults(func=_cmd_serve)
 
     for name, phase, help_text in (
-        ("generate", "Phase 2", "build the synthetic dataset"),
-        ("split", "Phase 2", "assign train/validation/test splits"),
         ("train", "Phase 3", "train one rung of the baseline ladder"),
         ("evaluate", "Phase 4", "score a model and write an evaluation report"),
     ):
