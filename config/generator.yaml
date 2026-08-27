@@ -1,0 +1,117 @@
+# =============================================================================
+# Synthetic order generator - every parameter, documented.
+#
+# SPEC: section 03 ("Data strategy") and section 09 ("Defense-only compliance").
+#
+# WHAT THIS IS: a labelled tabular sampler. It emits order metadata rows with a
+# probabilistic RTO label drawn from published aggregate base rates. It does not
+# produce payment credentials, identity documents, or deliverable addresses, and
+# nothing it emits is usable outside this repository's evaluation harness.
+#
+# WHAT THE NUMBERS MEAN: base rates are anchored to the public sources listed in
+# docs/sources.md. They calibrate a simulator; they are not a claim about any
+# real merchant's book.
+#
+# Phase 1 status: this file is the contract. The generator that consumes it is
+# implemented in Phase 2 (src/rto_sentinel/data/generator.py).
+# =============================================================================
+version: 1
+seed: 20260827          # overridden by RTO_RANDOM_SEED when that env var is set
+
+horizon:
+  n_orders: 120000
+  start_date: "2025-09-01"
+  days: 180             # split boundaries in config/splits.yaml refer to these days
+
+# --- payment mix -------------------------------------------------------------
+# Source: ET Prime Research via Dazeinfo - COD is ~60-65% of Indian e-commerce.
+payment:
+  cod_share: 0.62
+  # Probability a customer who initially attempted prepaid falls back to COD.
+  # Modelled because "COD after a failed prepaid attempt" is a spec feature.
+  prepaid_failure_to_cod: 0.08
+
+# --- outcome base rates ------------------------------------------------------
+# Sources: GoKwik (~23% blended RTO), Shipway ShipNotes FY25 (~26% COD vs <2%
+# prepaid). These are the marginal targets the generator is calibrated to hit;
+# the causal structure below redistributes risk around them.
+base_rates:
+  rto_given_cod: 0.26
+  rto_given_prepaid: 0.018
+  # Tolerance for the calibration self-check in the generator's own test.
+  marginal_tolerance: 0.02
+
+# --- latent risk structure ---------------------------------------------------
+# The generator draws a latent risk score as a linear combination of the drivers
+# below, then samples the label. Coefficients are on the logit scale. They are
+# the generator's assumptions, stated openly so a reviewer can attack them - the
+# model is never shown these values.
+causal_drivers:
+  address_quality:        {weight: -1.25, note: "poor address text causes real delivery failure"}
+  prior_rto_rate:         {weight:  1.60, note: "strongest honest signal; as-of order time only"}
+  discount_depth:         {weight:  0.75, note: "deep-discount impulse orders return more"}
+  order_value_zscore:     {weight:  0.35, note: "unusually large orders for that customer"}
+  late_night_order:       {weight:  0.30, note: "low-intent impulse window, 23:00-04:00"}
+  pincode_tier_effect:    {weight:  0.45, note: "tier-3 lanes; audited for disparate impact in eval"}
+  is_new_customer:        {weight:  0.40, note: "no history; tracked as a separate cohort"}
+  time_to_checkout_fast:  {weight:  0.25, note: "seconds from cart to order"}
+  courier_lane_quality:   {weight: -0.50, note: "lane performance, not customer behaviour"}
+
+# --- entity populations ------------------------------------------------------
+customers:
+  n_customers: 45000
+  # Long tail: most customers order once, a few order often.
+  orders_per_customer_alpha: 1.8
+  new_customer_share: 0.34
+
+geography:
+  # Pincodes are synthetic identifiers, not a map of real Indian postcodes.
+  n_pincodes: 2200
+  tier_shares: {tier_1: 0.34, tier_2: 0.38, tier_3: 0.28}
+  # Bayesian shrinkage applied to per-pincode RTO priors. SPEC section 04:
+  # raw pincode rate is an income proxy; only smoothed aggregates are permitted.
+  shrinkage_prior_strength: 50
+  min_support_for_feature: 30
+
+address_quality:
+  # Share of orders whose address text is degraded, by tier. Degradation means
+  # missing house number, no landmark, gibberish tokens, or city/pincode mismatch.
+  degraded_share: {tier_1: 0.08, tier_2: 0.15, tier_3: 0.24}
+
+catalogue:
+  categories:
+    - {name: fashion,      share: 0.34, rto_multiplier: 1.35, margin_rate: 0.42}
+    - {name: electronics,  share: 0.14, rto_multiplier: 0.85, margin_rate: 0.12}
+    - {name: beauty,       share: 0.18, rto_multiplier: 1.05, margin_rate: 0.48}
+    - {name: home,         share: 0.20, rto_multiplier: 0.95, margin_rate: 0.30}
+    - {name: accessories,  share: 0.14, rto_multiplier: 1.20, margin_rate: 0.45}
+  order_value:
+    distribution: lognormal
+    mu: 6.85              # ~ INR 950 median
+    sigma: 0.72
+    min: 149
+    max: 45000
+
+couriers:
+  - {name: courier_a, share: 0.32, lane_quality: 0.80}
+  - {name: courier_b, share: 0.28, lane_quality: 0.62}
+  - {name: courier_c, share: 0.24, lane_quality: 0.71}
+  - {name: courier_d, share: 0.16, lane_quality: 0.55}
+
+# --- label timing ------------------------------------------------------------
+# SPEC section 03 rule 5: an order is labelled only once its terminal state is
+# known. Orders whose resolution would fall outside the horizon are excluded
+# rather than optimistically labelled "delivered".
+label_maturity:
+  resolution_days_min: 5
+  resolution_days_max: 9
+  exclude_unresolved_tail: true
+
+# --- realism anchors ---------------------------------------------------------
+# Public tabular datasets shape marginal distributions (basket size, RFM
+# structure). They never supply an RTO label - that comes from this generator
+# alone. SPEC section 03, "Sources".
+realism_anchors:
+  basket_structure_reference: "UCI Online Retail II"
+  used_for: ["item_count", "basket_value_shape", "repeat_purchase_cadence"]
+  used_for_labels: false

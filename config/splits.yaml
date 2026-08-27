@@ -1,0 +1,53 @@
+# =============================================================================
+# Split protocol - FIXED BEFORE MODELLING. SPEC section 03.
+#
+# This file is deliberately written before any results exist. Changing it after
+# seeing test-set numbers invalidates the evaluation, and run metadata records
+# its content hash so that is detectable rather than deniable.
+# =============================================================================
+version: 1
+
+strategy: temporal_grouped
+
+# 1. Temporal split, not random. A random split leaks the future into the past
+#    and is the single most common way hackathon risk models fake a score.
+temporal:
+  train_days: [1, 126]
+  validation_days: [127, 147]
+  test_days: [148, 180]
+
+# 2. Group constraint on top: no customer_hash may appear in more than one
+#    split, so the model learns behaviour rather than memorising individuals.
+group:
+  key: customer_hash
+  disjoint_across_splits: true
+
+# 3. The test set is sealed. It is scored exactly once, at the end, after the
+#    threshold has been fixed on validation.
+sealing:
+  test_set_sealed: true
+  max_test_evaluations: 1
+  threshold_fitted_on: validation
+  # The harness writes a receipt here the first time the test set is scored and
+  # refuses a second scoring run unless that file is deleted deliberately.
+  seal_receipt_path: artifacts/reports/test_set_seal.json
+
+# 4. All aggregate features are computed as-of order time. Enforced by an as-of
+#    join in code and covered by tests/leakage/test_no_future_aggregates.py.
+as_of_join:
+  enforced: true
+  order_timestamp_column: ordered_at
+  resolution_timestamp_column: resolved_at
+  rule: "Only orders whose resolved_at precedes the current row's ordered_at may
+         contribute to any historical aggregate."
+
+# 5. Label maturity window: an order is labelled only once its terminal state is
+#    known. Orders in the final 9 days are excluded rather than optimistically
+#    labelled "delivered".
+label_maturity:
+  max_resolution_days: 9
+  exclude_immature_tail: true
+
+# Drift exposure: performance on the final two weeks alone. SPEC section 07.
+drift_window:
+  final_days: 14

@@ -1,0 +1,80 @@
+# =============================================================================
+# Intervention policy - the four-rung friction ladder.
+#
+# SPEC: section 06 ("The friction ladder") and section 09 ("Human safeguards").
+#
+# INVARIANTS enforced in code (src/rto_sentinel/decision/policy.py) and covered
+# by tests, not by discipline:
+#   1. No band is a silent hard block. Every band above LOW carries a reason
+#      code, and SEVERE carries an appeal path plus a human review queue.
+#   2. Bands are ordered and contiguous: LOW < ELEVATED < HIGH < SEVERE.
+#   3. The primary flag / no-flag boundary is the cost-derived threshold from
+#      config/cost_model.yaml. It is NEVER hardcoded here and NEVER 0.5.
+#   4. The sub-band cut points below are multipliers ON that derived threshold,
+#      so the whole ladder moves when the merchant's economics move.
+# =============================================================================
+version: 1
+
+bands:
+  - name: LOW
+    upper_bound_multiplier: 1.0        # p < 1.0 * threshold
+    action: none
+    customer_visible: false
+    reversible: true
+    requires_reason_code: false
+    requires_appeal_path: false
+    requires_human_review_queue: false
+    description: "COD offered freely. Zero friction is the default state."
+
+  - name: ELEVATED
+    upper_bound_multiplier: 1.6
+    action: prepaid_nudge
+    customer_visible: true
+    reversible: true
+    requires_reason_code: true
+    requires_appeal_path: false
+    requires_human_review_queue: false
+    description: "Prepaid nudge with a small incentive. Positive-sum - cheaper
+                  than an RTO, and the customer gains something."
+
+  - name: HIGH
+    upper_bound_multiplier: 2.4
+    action: confirmation_required
+    channels: [whatsapp, otp]
+    customer_visible: true
+    reversible: true
+    requires_reason_code: true
+    requires_appeal_path: false
+    requires_human_review_queue: false
+    description: "COD allowed after one-tap confirmation before dispatch.
+                  Low friction, high signal."
+
+  - name: SEVERE
+    upper_bound_multiplier: null       # open-ended top band
+    action: prepaid_only
+    customer_visible: true
+    reversible: true
+    requires_reason_code: true
+    requires_appeal_path: true
+    requires_human_review_queue: true
+    description: "Prepaid-only with a visible appeal path. Reserved for a small
+                  tail. Never silent, never permanent, always reversible by an
+                  ops human."
+
+safeguards:
+  hard_block_allowed: false            # asserted by tests/unit/test_policy_config.py
+  ops_override_enabled: true
+  ops_override_logged: true            # overrides are counterfactual evidence
+  decision_log_retention_days: 400
+  # SPEC section 09: customers are never told they are "flagged"; friction is
+  # framed neutrally. Enforced by the message validator in the agent layer.
+  neutral_customer_framing_required: true
+
+# SPEC section 11, "the counterfactual problem": once friction is applied the
+# true outcome of that order is never observed. A small randomised control slice
+# of high-risk orders receives no friction so precision stays measurable.
+holdout_control:
+  enabled: true
+  fraction_of_flagged: 0.02
+  applies_to_bands: [ELEVATED, HIGH, SEVERE]
+  rationale: "Only clean way to keep measuring true precision once the model acts."

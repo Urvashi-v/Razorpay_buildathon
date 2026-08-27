@@ -1,0 +1,79 @@
+# =============================================================================
+# Local development stack.
+#
+#   docker compose up -d db      # just PostgreSQL; run the API on the host
+#   docker compose up            # database + API + console
+#
+# NO CREDENTIALS ARE HARDCODED HERE. Every value comes from your .env file,
+# which is git-ignored. Copy .env.example to .env before the first run:
+#
+#   cp .env.example .env
+#
+# The `?err` suffix on a variable makes compose refuse to start when it is
+# missing, rather than silently substituting an empty string and producing a
+# database with a blank password.
+# =============================================================================
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: rto-sentinel-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB in .env}
+    ports:
+      # Bound to localhost only. Exposing 0.0.0.0 would put a development
+      # database with a development password on the local network.
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - rto_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    container_name: rto-sentinel-api
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      RTO_ENV: ${RTO_ENV:-development}
+      RTO_LOG_LEVEL: ${RTO_LOG_LEVEL:-INFO}
+      RTO_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      RTO_CORS_ORIGINS: ${RTO_CORS_ORIGINS:-http://localhost:5173}
+      RTO_RANDOM_SEED: ${RTO_RANDOM_SEED:-20260827}
+      RTO_ACTIVE_MODEL_PATH: ${RTO_ACTIVE_MODEL_PATH:-}
+      # The language layer is OFF unless you switch it on and supply a key.
+      # An absent key is a supported operating state, not a broken one.
+      RTO_AGENTS_ENABLED: ${RTO_AGENTS_ENABLED:-false}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports:
+      - "127.0.0.1:${RTO_API_PORT:-8000}:8000"
+    volumes:
+      # Config and artefacts are mounted so a retrain on the host is visible to
+      # the container without a rebuild.
+      - ./config:/app/config:ro
+      - ./artifacts:/app/artifacts
+
+  console:
+    build:
+      context: ./console
+      dockerfile: ../docker/console.Dockerfile
+    container_name: rto-sentinel-console
+    depends_on:
+      - api
+    environment:
+      # Public by definition: anything VITE_-prefixed is compiled into the
+      # browser bundle. Never put a secret here.
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+    ports:
+      - "127.0.0.1:5173:5173"
+
+volumes:
+  rto_pgdata:

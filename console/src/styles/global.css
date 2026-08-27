@@ -1,0 +1,182 @@
+:root {
+  /* A restrained palette. This is an operations console: the colour that means
+     "SEVERE" has to be unambiguous, so everything else stays quiet. */
+  --bg: #0f1115;
+  --surface: #171a21;
+  --surface-raised: #1e222b;
+  --border: #2a2f3a;
+  --text: #e6e8ec;
+  --text-muted: #9aa2b1;
+
+  --band-low: #4ade80;
+  --band-elevated: #fbbf24;
+  --band-high: #fb923c;
+  --band-severe: #f87171;
+
+  --accent: #60a5fa;
+  --ok: #4ade80;
+  --warn: #fbbf24;
+  --error: #f87171;
+
+  --radius: 8px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 16px;
+  --space-4: 24px;
+  --space-5: 40px;
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Code", "Source Code Pro", Menlo, monospace;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f7f8fa;
+    --surface: #ffffff;
+    --surface-raised: #f0f2f5;
+    --border: #d8dce3;
+    --text: #14171c;
+    --text-muted: #5b6472;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+code,
+.mono {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+a {
+  color: var(--accent);
+}
+
+.app-shell {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: var(--space-5) var(--space-3);
+}
+
+.app-header {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.app-header h1 {
+  margin: 0 0 var(--space-1);
+  font-size: 1.6rem;
+  letter-spacing: -0.02em;
+}
+
+.app-header p {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.card h2 {
+  margin: 0 0 var(--space-2);
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.status-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.status-row:last-child {
+  border-bottom: none;
+}
+
+.status-name {
+  min-width: 130px;
+  font-weight: 600;
+}
+
+.status-detail {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.pill {
+  display: inline-block;
+  padding: 1px var(--space-2);
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.pill--ok {
+  background: color-mix(in srgb, var(--ok) 18%, transparent);
+  color: var(--ok);
+}
+
+.pill--warn {
+  background: color-mix(in srgb, var(--warn) 18%, transparent);
+  color: var(--warn);
+}
+
+.pill--error {
+  background: color-mix(in srgb, var(--error) 18%, transparent);
+  color: var(--error);
+}
+
+.notice {
+  border-left: 3px solid var(--warn);
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface-raised);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.notice--provenance {
+  border-left-color: var(--accent);
+}
+
+.phase-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: var(--text-muted);
+}
+
+.phase-list li {
+  margin-bottom: var(--space-1);
+}
+
+.phase-list .done {
+  color: var(--ok);
+}

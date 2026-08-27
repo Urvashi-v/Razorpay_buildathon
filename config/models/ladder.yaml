@@ -1,0 +1,89 @@
+# =============================================================================
+# The baseline ladder - a ladder, not a leaderboard chase. SPEC section 05.
+#
+# Every rung is evaluated identically on the same sealed test set, against the
+# SAME cost metric. If a simpler rung wins, it ships.
+# =============================================================================
+version: 1
+
+rungs:
+  - id: 0
+    name: do_nothing
+    kind: baseline
+    enabled: true
+    description: "Ship everything, flag nothing. Defines the loss the merchant
+                  currently absorbs; every later number is measured against it."
+
+  - id: 1
+    name: blanket_cod_block
+    kind: heuristic
+    enabled: true
+    params:
+      value_threshold_inr: 1500
+    description: "Blanket COD block above a value. What many merchants actually
+                  do. Usually terrible - high recall, catastrophic precision,
+                  kills GMV. Worth showing precisely how bad."
+
+  - id: 2
+    name: pincode_blocklist
+    kind: heuristic
+    enabled: true
+    params:
+      top_decile: 0.10
+      min_support: 30
+    description: "The common smart heuristic. Demonstrates the fairness problem
+                  numerically and gives a real bar to beat."
+
+  - id: 3
+    name: logistic_regression
+    kind: model
+    enabled: true
+    params:
+      penalty: l2
+      C: 1.0
+      class_weight: null
+      max_iter: 2000
+      monotonic_features: [prior_rto_rate, discount_depth]
+    description: "Interpretable, fast, calibrated by construction. Surprisingly
+                  hard to beat and a genuine shipping candidate."
+
+  - id: 4
+    name: lightgbm_isotonic
+    kind: model
+    enabled: true
+    params:
+      objective: binary
+      n_estimators: 600
+      learning_rate: 0.05
+      num_leaves: 31
+      min_child_samples: 40
+      subsample: 0.9
+      colsample_bytree: 0.8
+      # SPEC section 05: RTO on COD runs around one in four, mild by fraud
+      # standards. No SMOTE, no aggressive resampling. scale_pos_weight if
+      # anything, and the ranking metrics handle the rest.
+      scale_pos_weight: 1.0
+    calibration:
+      method: isotonic
+      fitted_on: validation        # never on train, never on test
+    description: "The expected winner. Handles interactions and missingness
+                  natively; isotonic regression on the validation fold fixes the
+                  score distortion raw boosting produces."
+
+  - id: 5
+    name: lightgbm_address_text
+    kind: model
+    enabled: false                 # attempted only if time permits
+    promotion_rule: "Ships only if it beats rung 4 on NET RUPEES, not on AUC."
+    description: "Rung 4 plus a text encoder on address strings."
+
+resampling:
+  smote: false
+  reason: "Synthetic minority oversampling on tabular risk data manufactures
+           optimism. Ranking metrics handle mild imbalance."
+
+selection:
+  primary_metric: net_inr_saved_per_1000_orders
+  tiebreakers: [pr_auc, expected_calibration_error]
+  # A model that flags 40 percent of orders is unusable regardless of precision.
+  max_acceptable_flag_rate: 0.25

@@ -1,0 +1,81 @@
+# =============================================================================
+# Evaluation harness. SPEC section 07 and appendix A1.
+#
+# Built on day 0, before any model exists - so the scoreboard cannot be bent
+# around a result after the fact.
+# =============================================================================
+version: 1
+
+primary_metric: net_inr_saved_per_1000_orders
+
+ranking_metrics:
+  pr_auc:
+    lead_with: true
+    note: "Primary ranking metric; not inflated by the large negative class."
+  roc_auc:
+    lead_with: false
+    note: "Reported but not led with - it flatters imbalanced problems."
+  recall_at_precision: [0.80, 0.90]
+  precision_at_k: [0.01, 0.05, 0.10]
+
+calibration_metrics:
+  expected_calibration_error:
+    bins: 10
+    strategy: uniform
+    note: "Headline metric alongside precision and recall. If the score is not an
+           honest probability, the expected-value threshold is wrong and the
+           rupee numbers are fiction."
+  brier_score: true
+  reliability_diagram: true
+
+economics:
+  report_separately:
+    - net_inr_saved_per_1000_orders
+    - total_false_positive_cost_inr   # never netted away inside a savings number
+    - flag_rate                       # precision without it is meaningless
+
+uncertainty:
+  bootstrap:
+    enabled: true
+    iterations: 2000
+    confidence: 0.95
+    note: "A point estimate on 5,000 rows is not a result."
+
+cohorts:
+  - new_vs_returning_customer
+  - cod_vs_prepaid
+  - order_value_quartile
+  - pincode_tier
+  - final_two_weeks_only            # drift exposure
+
+fairness:
+  # SPEC section 07: a model that concentrates its flags on tier-3 pincodes has
+  # not found fraud, it has found poverty and bad municipal addressing.
+  group_by: [pincode_tier, order_value_band]
+  report: [flag_rate, precision, recall, net_inr_per_1000]
+  # If a tier is flagged materially more often AND with materially worse
+  # precision, the model is transferring cost onto that group without
+  # justification and the smoothed geography features get pulled back. This is a
+  # build-time gate, reported in REPORT.md whichever way it lands.
+  disparity_review_trigger:
+    flag_rate_ratio_above: 1.5
+    precision_drop_below: 0.10
+
+ablation:
+  mode: leave_one_family_out
+  families:
+    - address_quality
+    - customer_history
+    - order_shape
+    - session_intent
+    - geography_route
+
+# SPEC section 07, "What I will not do". These are asserted by the report
+# builder, which refuses to emit a report that violates any of them.
+forbidden:
+  - report_single_accuracy_figure
+  - lead_with_roc_auc
+  - tune_threshold_on_test_set
+  - quote_precision_without_flag_rate
+  - net_false_positive_cost_away
+  - present_point_estimate_as_precise

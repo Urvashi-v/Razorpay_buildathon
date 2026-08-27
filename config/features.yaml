@@ -1,0 +1,124 @@
+# =============================================================================
+# Feature families - each independently ablatable. SPEC section 04.
+#
+# Setting `enabled: false` removes a family from the design matrix everywhere it
+# is used. That is how the leave-one-family-out ablation study is run, and it is
+# also the lever the fairness audit pulls if geography features prove to be
+# transferring cost onto a pincode tier without justification.
+# =============================================================================
+version: 1
+
+families:
+  address_quality:
+    enabled: true
+    signals:
+      - token_count
+      - has_house_number
+      - has_floor_number
+      - pincode_city_consistent
+      - has_landmark
+      - allcaps_ratio
+      - gibberish_ratio
+      - edit_distance_to_known_good
+    risk_note: "Genuinely predictive and genuinely fair - poor address text causes
+                real delivery failure. Must not become a literacy proxy; audited
+                in the fairness report."
+
+  customer_history:
+    enabled: true
+    as_of: true                    # MANDATORY: computed as-of order time
+    signals:
+      - prior_order_count
+      - prior_rto_count
+      - prior_rto_rate
+      - days_since_last_order
+      - prepaid_to_cod_ratio
+      - mean_resolution_days
+    risk_note: "New customers have no history. The model must not simply learn
+                that new equals risky; the new-customer cohort is reported as a
+                separate slice in every evaluation."
+
+  order_shape:
+    enabled: true
+    signals:
+      - order_value_inr
+      - value_vs_customer_median
+      - item_count
+      - category
+      - discount_depth
+      - is_cod
+      - cart_edited
+      - time_to_checkout_seconds
+    risk_note: "Deep-discount impulse orders are high risk - but that is partly
+                the merchant's own doing, and is surfaced as a merchant insight
+                rather than only as a customer penalty."
+
+  session_intent:
+    enabled: true
+    signals:
+      - product_page_seconds
+      - sessions_before_purchase
+      - device_class
+      - hour_of_day
+      - cod_after_prepaid_failure
+    risk_note: "Weak individually. Included because low-intent late-night impulse
+                purchases are a documented RTO driver."
+
+  geography_route:
+    enabled: true
+    shrinkage: bayesian            # never a raw per-pincode rate
+    min_support: 30
+    signals:
+      - pincode_rto_rate_smoothed
+      - pincode_tier
+      - pincode_serviceability
+      - courier_lane_rto_rate_smoothed
+    risk_note: "HIGHEST FAIRNESS RISK IN THE MODEL. Raw pincode rate is an income
+                and region proxy. Used only with Bayesian shrinkage toward the
+                global mean, with a minimum support threshold, and never as a
+                top-3 SHAP feature without written justification in REPORT.md."
+
+# -----------------------------------------------------------------------------
+# REFUSED FEATURES - SPEC section 04, "What I am refusing to use".
+# tests/unit/test_refused_features.py asserts that no column matching these
+# patterns can reach a model, so the refusal is mechanical rather than a promise.
+# -----------------------------------------------------------------------------
+refused:
+  - id: name_derived
+    patterns:
+      - customer_name
+      - first_name
+      - last_name
+      - surname
+      - name_token
+      - name_ngram
+      - name_embedding
+    reason: "Religion, caste and region inference from names is a live harm in
+             Indian systems. Names are hashed for identity only, never featurised."
+
+  - id: raw_pincode_categorical
+    patterns:
+      - pincode_raw
+      - pincode_categorical
+      - pincode_onehot
+      - pincode_target_encoded
+    reason: "With enough trees this becomes a redlining machine. Only smoothed,
+             shrunk aggregates with a minimum support threshold are permitted."
+
+  - id: protected_attributes
+    patterns:
+      - gender
+      - age
+      - date_of_birth
+      - religion
+      - caste
+      - language_inferred
+    reason: "No lift worth the exposure."
+
+  - id: cross_merchant
+    patterns:
+      - cross_merchant
+      - global_customer_graph
+      - shared_identity_ring
+    reason: "Out of scope, and a consent question this project cannot resolve
+             responsibly in this window."

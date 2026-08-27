@@ -1,0 +1,53 @@
+# ---- secrets: never commit -------------------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+
+# ---- python ----------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# ---- node / frontend -------------------------------------------------------
+node_modules/
+console/dist/
+console/coverage/
+console/.vite/
+npm-debug.log*
+*.tsbuildinfo
+
+# ---- generated ML + data artefacts -----------------------------------------
+# Datasets and model binaries are reproducible from config + seed; they are not
+# source. Keep the tree clean and let scripts/ regenerate them.
+artifacts/datasets/*
+artifacts/models/*
+artifacts/reports/*
+!artifacts/**/.gitkeep
+mlruns/
+*.pkl
+*.joblib
+*.parquet
+*.db
+*.sqlite3
+
+# ---- editors / os ----------------------------------------------------------
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db

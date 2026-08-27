@@ -1,0 +1,82 @@
+# =============================================================================
+# Economic cost model - the centre of this submission.
+#
+# SPEC: section 06 ("The cost model - what a false positive actually costs").
+#
+# These four merchant-specific inputs derive the operating threshold:
+#
+#     C_fp      = abandonment_on_friction * contribution_margin
+#     S_tp      = intervention_success_rate * rto_cost
+#     threshold = C_fp / (C_fp + S_tp)
+#
+# Worked example from the spec, reproduced here as the default profile:
+#     C_fp      = 0.25 * 250 = 62.5
+#     S_tp      = 0.60 * 220 = 132.0
+#     threshold = 62.5 / (62.5 + 132.0) = 0.3214...
+#
+# Not 0.5. And it moves with the merchant's margin.
+#
+# None of these constants is a universal truth. The console exposes all four as
+# sliders and the threshold recomputes live. Values below are DEFAULTS, taken
+# from the published cost bands cited in docs/sources.md.
+# =============================================================================
+version: 1
+
+default_profile: mid_margin_d2c
+
+profiles:
+  mid_margin_d2c:
+    label: "Mid-margin D2C brand (spec worked example)"
+    rto_cost_inr: 220.0                 # forward + reverse freight, repack, QC, support
+    contribution_margin_inr: 250.0      # margin lost if a good order is abandoned
+    abandonment_on_friction: 0.25       # P(good customer walks away when frictioned)
+    intervention_success_rate: 0.60     # P(risky order saved | friction applied)
+    friction_support_cost_inr: 8.0      # per-friction ops and messaging cost
+
+  thin_margin_reseller:
+    label: "Thin-margin reseller - should flag less"
+    rto_cost_inr: 180.0
+    contribution_margin_inr: 90.0
+    abandonment_on_friction: 0.30
+    intervention_success_rate: 0.55
+    friction_support_cost_inr: 8.0
+
+  high_margin_beauty:
+    label: "High-margin beauty brand - should flag more"
+    rto_cost_inr: 240.0
+    contribution_margin_inr: 520.0
+    abandonment_on_friction: 0.18
+    intervention_success_rate: 0.65
+    friction_support_cost_inr: 8.0
+
+# --- documented bounds -------------------------------------------------------
+# The API rejects merchant inputs outside these ranges rather than silently
+# clamping them, so a nonsensical threshold can never be derived unnoticed.
+bounds:
+  rto_cost_inr:
+    min: 50.0
+    max: 2000.0
+    source: "INR 150-300 typical direct cost band; wider bounds allow outliers"
+  contribution_margin_inr:
+    min: 1.0
+    max: 20000.0
+  abandonment_on_friction:
+    min: 0.0
+    max: 1.0
+  intervention_success_rate:
+    min: 0.0
+    max: 1.0
+  friction_support_cost_inr:
+    min: 0.0
+    max: 500.0
+
+# --- sensitivity analysis ----------------------------------------------------
+# SPEC section 07: "how fast do the rupee savings degrade if the cost inputs are
+# wrong by 30 percent?" The evaluation harness sweeps these perturbations.
+sensitivity:
+  perturbations: [-0.30, -0.15, 0.0, 0.15, 0.30]
+  parameters:
+    - rto_cost_inr
+    - contribution_margin_inr
+    - abandonment_on_friction
+    - intervention_success_rate

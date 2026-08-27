@@ -1,0 +1,16 @@
+.git
+.venv
+venv
+node_modules
+console/dist
+__pycache__
+*.pyc
+.mypy_cache
+.ruff_cache
+.pytest_cache
+artifacts/datasets/*
+artifacts/models/*
+artifacts/reports/*
+.env
+.env.*
+!.env.example
