@@ -32,10 +32,12 @@ evaluation report object, and on the console — not only here.
 
 ---
 
-## Current status: Phase 2 of 6
+## Current status: Phase 4 of 6
 
-**Phase 1** established the architecture. **Phase 2** built the data layer. The
-following are implemented, tested, and working:
+**Phase 1** established the architecture, **Phase 2** built the data layer,
+**Phase 3** built the feature pipeline and the leakage defences, and **Phase 4**
+built and measured the baseline ladder. The following are implemented, tested,
+and working:
 
 - A reproducible **benchmark generator** with a documented causal simulation
 - **PostgreSQL persistence**: 10 tables, Alembic migrations, bulk loader
@@ -43,20 +45,33 @@ following are implemented, tested, and working:
 - **As-of joins** with a brute-force reference implementation and a leakage guard
 - **Label maturity**: unresolved orders get a NULL label, never "delivered"
 - **Split protocol**: temporal windows inside disjoint customer pools, sealed test set
-- Dataset artefacts as parquet with a JSON provenance sidecar
-- A CLI covering generate / validate / migrate / seed / query
-- The **four leakage tests the specification promises**, running against real
-  generated data
+- **Six feature families** behind a typed dataset contract, each independently
+  ablatable, each feature documenting its lookback and its availability at
+  scoring time
+- **Eleven leakage tests** — the four the specification promises plus the seven
+  from Phase 3 — running against real generated data
+- **The complete baseline ladder**, rungs 0–4, trained and evaluated on identical
+  footing at a cost-derived threshold
+- **Experiment tracking**: six versions pinned per result, machine-readable
+  records, per-order scores, four plots, and a generated results document
+- **Model artefacts**: joblib payload, provenance card, SHA-256 checksum verified
+  before unpickling
+- A CLI covering generate / validate / migrate / seed / query / features / split /
+  train / evaluate
 - Typed, validating configuration with a content fingerprint
 - FastAPI application with a working `/health` and `/readiness`
 - A React console that reads live backend status
 
-The ML models, decision arithmetic, dashboard and agent layer are **scaffolded
-with fixed interfaces and not implemented**. Their endpoints return
-`501 NOT_IMPLEMENTED`; their functions raise `NotImplementedError` naming the
-phase. Nothing returns placeholder data.
+**No calibrated model exists yet, so no decision can be produced yet.** Every
+Phase 4 rung carries `calibration_method: null`, and the decision engine refuses
+an uncalibrated score by design. Calibration, the policy bands and the serving
+path are Phase 5. The dashboard and agent layer remain **scaffolded with fixed
+interfaces and not implemented**: their endpoints return `501 NOT_IMPLEMENTED`
+and their functions raise `NotImplementedError` naming the phase. Nothing returns
+placeholder data.
 
 Full breakdown: [ARCHITECTURE.md § Implementation status](ARCHITECTURE.md#8-implementation-status).
+Measured results: [docs/ladder_results.md](docs/ladder_results.md).
 
 ---
 
@@ -121,6 +136,21 @@ known-bad data is worse than having none, because it looks like a working system
 ```bash
 rto-sentinel db stats
 ```
+
+### Train and evaluate the baseline ladder
+
+```bash
+rto-sentinel train --seed 7 --customers 20000 --orders 60000
+```
+
+That generates the dataset, builds the features, trains all five rungs, evaluates
+them on the validation split at the cost-derived threshold, and writes the
+comparison table, the machine-readable results, the per-order scores, four plots
+and [docs/ladder_results.md](docs/ladder_results.md). Nothing in that document is
+written by hand.
+
+The test split stays sealed. `--split test` unseals it and asks for a written
+reason; it is meant to be used once, at the end.
 
 ### Run the API
 
@@ -293,6 +323,30 @@ Reported for every rung of the baseline ladder, on identical footing:
 There is no `accuracy()` function in this codebase. At a one-in-four positive
 rate, accuracy rewards doing nothing.
 
+### What the Phase 4 measurement actually showed
+
+Full table and provenance: [docs/ladder_results.md](docs/ladder_results.md).
+Three results are worth stating plainly rather than burying:
+
+**Logistic regression beats LightGBM**, on both PR-AUC and net rupees,
+reproducibly across seeds. That is not the expected ordering and it was
+investigated rather than tuned away. The mechanism: the simulator draws each
+order's RTO probability from a **linear combination on the logit scale**, which
+makes logistic regression close to the correctly-specified model for this data.
+LightGBM at its configured size then pays for flexibility it cannot use — it
+scores 0.96 PR-AUC on train against 0.44 on validation. This says something about
+the benchmark, not about which model family wins on real RTO data.
+
+**The ceiling is low, and known.** Ranking the validation set by the simulator's
+own true probability — the best any model could possibly do — gives PR-AUC 0.598.
+The gap between that and rung 3's 0.483 is the honest headroom; the gap between
+0.483 and 1.0 is not.
+
+**Rung 2 loses money.** The pincode blocklist nets −₹808 per 1,000 orders: it
+flags 4.8% of orders at 26.5% precision, which is barely above the 19.1% base
+rate, and the friction costs more than the prevented RTOs save. A baseline that
+loses money is a useful result, and it is reported rather than dropped.
+
 ---
 
 ## Fairness
@@ -353,7 +407,10 @@ a key must be present.
 |---|---|
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Components, boundaries, data flow, security |
 | [docs/simulator.md](docs/simulator.md) | **How the benchmark data is produced**, and what it can and cannot demonstrate |
-| [REPORT.md](REPORT.md) | Results — currently empty, by design |
+| [docs/features.md](docs/features.md) | Every feature, its lookback, and why it is available at scoring time |
+| [docs/splitting.md](docs/splitting.md) | The split protocol, and why random splitting would be dangerous |
+| [docs/ladder_results.md](docs/ladder_results.md) | **Measured baseline-ladder results.** Generated, never hand-written |
+| [REPORT.md](REPORT.md) | Final report — written once the system is complete |
 | [docs/sources.md](docs/sources.md) | Every market figure, with its citation |
 | [docs/adr/](docs/adr/) | Architecture decision records |
 | [migrations/README.md](migrations/README.md) | Migration workflow |

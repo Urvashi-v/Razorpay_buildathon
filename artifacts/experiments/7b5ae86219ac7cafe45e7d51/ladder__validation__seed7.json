@@ -1,0 +1,1007 @@
+{
+  "evaluated_split": "validation",
+  "dataset_run_id": "7b5ae86219ac7cafe45e7d51",
+  "config_fingerprint": "f3943b6937cf0b36164e1fec043e25fc8c4eab1bc684887d778f14a268ebf251",
+  "feature_fingerprint": "798aef57ad3cefe94cfeeb9555287fefda16e0c502f236f7e226590923531dfb",
+  "seed": 7,
+  "cost_profile": "mid_margin_d2c",
+  "threshold": 0.34814814814814815,
+  "threshold_source": "derived from cost inputs: C_fp=70.50, S_tp=132.00",
+  "records": [
+    {
+      "experiment_id": "a3beba08957d74cdbd58",
+      "model_name": "do_nothing",
+      "model_version": "b2880c0d36ce",
+      "rung_id": 0,
+      "rung_kind": "baseline",
+      "generator_version": "1.0.0",
+      "dataset_run_id": "7b5ae86219ac7cafe45e7d51",
+      "feature_version": "1.0.0",
+      "feature_fingerprint": "798aef57ad3cefe94cfeeb9555287fefda16e0c502f236f7e226590923531dfb",
+      "config_fingerprint": "f3943b6937cf0b36164e1fec043e25fc8c4eab1bc684887d778f14a268ebf251",
+      "seed": 7,
+      "hyperparameters": {
+        "random_state": 7
+      },
+      "families_used": [
+        "customer_history",
+        "temporal",
+        "order_shape",
+        "address_quality",
+        "session_intent",
+        "geography_route"
+      ],
+      "n_features": 54,
+      "trained_at": "2026-08-28T18:04:48.002342Z",
+      "train_duration_seconds": 0.000546799972653389,
+      "evaluated_split": "validation",
+      "split_strategy": "temporal_grouped",
+      "split_pool_shares": {
+        "train": 0.55,
+        "validation": 0.27,
+        "test": 0.18
+      },
+      "train_summary": {
+        "name": "train",
+        "n_rows": 23058,
+        "n_positives": 3871,
+        "positive_rate": 0.16788099574984822,
+        "n_customers": 8774,
+        "first_day": 1,
+        "last_day": 126,
+        "first_ordered_at": "2025-09-01T00:57:24Z",
+        "last_ordered_at": "2026-01-04T23:22:48Z"
+      },
+      "evaluation_summary": {
+        "name": "validation",
+        "n_rows": 2034,
+        "n_positives": 388,
+        "positive_rate": 0.19075712881022616,
+        "n_customers": 1529,
+        "first_day": 127,
+        "last_day": 147,
+        "first_ordered_at": "2026-01-05T00:34:58Z",
+        "last_ordered_at": "2026-01-25T23:42:01Z"
+      },
+      "ranking": {
+        "pr_auc": {
+          "value": 0.19075712881022616,
+          "ci_low": 0.17256637168141592,
+          "ci_high": 0.20648967551622419,
+          "confidence": 0.95,
+          "n_bootstrap": 500
+        },
+        "roc_auc": {
+          "value": null,
+          "ci_low": null,
+          "ci_high": null,
+          "confidence": 0.95,
+          "n_bootstrap": 0
+        },
+        "recall_at_precision_80": null,
+        "recall_at_precision_90": null,
+        "precision_at_k": {
+          "0.01": 0.5,
+          "0.05": 0.23529411764705882,
+          "0.10": 0.23645320197044334
+        }
+      },
+      "calibration": {
+        "expected_calibration_error": 0.022876133060378,
+        "brier_score": 0.15489216408210105,
+        "n_bins": 10,
+        "reliability_bins": [
+          [
+            0.16788099574984816,
+            0.19075712881022616,
+            2034
+          ]
+        ]
+      },
+      "threshold_metrics": [
+        {
+          "threshold": 0.34814814814814815,
+          "threshold_source": "cost-derived",
+          "true_positives": 0,
+          "false_positives": 0,
+          "false_negatives": 388,
+          "true_negatives": 1646,
+          "flag_rate": 0.0,
+          "precision": null,
+          "recall": 0.0,
+          "f1": null
+        },
+        {
+          "threshold": 0.1,
+          "threshold_source": "sweep",
+          "true_positives": 388,
+          "false_positives": 1646,
+          "false_negatives": 0,
+          "true_negatives": 0,
+          "flag_rate": 1.0,
+          "precision": 0.19075712881022616,
+          "recall": 1.0,
+          "f1": 0.32039636663914123
+        },
+        {
+          "threshold": 0.2,
+          "threshold_source": "sweep",
+          "true_positives": 0,
+          "false_positives": 0,
+          "false_negatives": 388,
+          "true_negatives": 1646,
+          "flag_rate": 0.0,
+          "precision": null,
+          "recall": 0.0,
+          "f1": null
+        },
+        {
+          "threshold": 0.3,
+          "threshold_source": "sweep",
+          "true_positives": 0,
+          "false_positives": 0,
+          "false_negatives": 388,
+          "true_negatives": 1646,
+          "flag_rate": 0.0,
+          "precision": null,
+          "recall": 0.0,
+          "f1": null
+        },
+        {
+          "threshold": 0.5,
+          "threshold_source": "sweep",
+          "true_positives": 0,
+          "false_positives": 0,
+          "false_negatives": 388,
+          "true_negatives": 1646,
+          "flag_rate": 0.0,
+          "precision": null,
+          "recall": 0.0,
+          "f1": null
+        }
+      ],
+      "economics": {
+        "threshold": 0.34814814814814815,
+        "flag_rate": 0.0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "false_negatives": 388,
+        "true_negatives": 1646,
+        "gross_saving_inr": 0.0,
+        "total_false_positive_cost_inr": 0.0,
+        "residual_false_negative_loss_inr": 85360.0,
+        "net_inr_saved_per_1000_orders": {
+          "value": 0.0,
+          "ci_low": 0.0,
+          "ci_high": 0.0,
+          "confidence": 0.95,
+          "n_bootstrap": 500
+        },
+        "baseline_net_inr_per_1000_orders": -41966.56833824976
+      },
+      "train_pr_auc": 0.16788099574984822,
+      "is_calibrated": false,
+      "notes": "Ship everything, flag nothing. Defines the loss the merchant currently absorbs; every later number is measured against it.",
+      "data_provenance": "Synthetic benchmark data. Labels are simulated outcomes of the documented process in docs/simulator.md, not real-world ground truth. Absolute metric values are not a claim about production performance.",
+      "recorded_at": "2026-08-28T18:04:48.029106Z"
+    },
+    {
+      "experiment_id": "69e01a7d56080295f92a",
+      "model_name": "blanket_cod_block",
+      "model_version": "ed624b899f3c",
+      "rung_id": 1,
+      "rung_kind": "heuristic",
+      "generator_version": "1.0.0",
+      "dataset_run_id": "7b5ae86219ac7cafe45e7d51",
+      "feature_version": "1.0.0",
+      "feature_fingerprint": "798aef57ad3cefe94cfeeb9555287fefda16e0c502f236f7e226590923531dfb",
+      "config_fingerprint": "f3943b6937cf0b36164e1fec043e25fc8c4eab1bc684887d778f14a268ebf251",
+      "seed": 7,
+      "hyperparameters": {
+        "value_threshold_inr": 1500,
+        "random_state": 7
+      },
+      "families_used": [
+        "customer_history",
+        "temporal",
+        "order_shape",
+        "address_quality",
+        "session_intent",
+        "geography_route"
+      ],
+      "n_features": 54,
+      "trained_at": "2026-08-28T18:04:51.770809Z",
+      "train_duration_seconds": 0.0000219999928958714,
+      "evaluated_split": "validation",
+      "split_strategy": "temporal_grouped",
+      "split_pool_shares": {
+        "train": 0.55,
+        "validation": 0.27,
+        "test": 0.18
+      },
+      "train_summary": {
+        "name": "train",
+        "n_rows": 23058,
+        "n_positives": 3871,
+        "positive_rate": 0.16788099574984822,
+        "n_customers": 8774,
+        "first_day": 1,
+        "last_day": 126,
+        "first_ordered_at": "2025-09-01T00:57:24Z",
+        "last_ordered_at": "2026-01-04T23:22:48Z"
+      },
+      "evaluation_summary": {
+        "name": "validation",
+        "n_rows": 2034,
+        "n_positives": 388,
+        "positive_rate": 0.19075712881022616,
+        "n_customers": 1529,
+        "first_day": 127,
+        "last_day": 147,
+        "first_ordered_at": "2026-01-05T00:34:58Z",
+        "last_ordered_at": "2026-01-25T23:42:01Z"
+      },
+      "ranking": {
+        "pr_auc": {
+          "value": 0.23442520958144536,
+          "ci_low": 0.20856966411525987,
+          "ci_high": 0.26155683690024606,
+          "confidence": 0.95,
+          "n_bootstrap": 500
+        },
+        "roc_auc": {
+          "value": 0.5647539802833486,
+          "ci_low": 0.545853572469897,
+          "ci_high": 0.5853767052233051,
+          "confidence": 0.95,
+          "n_bootstrap": 500
+        },
+        "recall_at_precision_80": null,
+        "recall_at_precision_90": null,
+        "precision_at_k": {
+          "0.01": 0.4,
+          "0.05": 0.38235294117647056,
+          "0.10": 0.41379310344827586
+        }
+      },
+      "calibration": {
+        "expected_calibration_error": 0.2055063913470993,
+        "brier_score": 0.2055063913470993,
+        "n_bins": 10,
+        "reliability_bins": [
+          [
+            0.0,
+            0.16882416396979505,
+            1854
+          ],
+          [
+            1.0,
+            0.4166666666666667,
+            180
+          ]
+        ]
+      },
+      "threshold_metrics": [
+        {
+          "threshold": 0.34814814814814815,
+          "threshold_source": "cost-derived",
+          "true_positives": 75,
+          "false_positives": 105,
+          "false_negatives": 313,
+          "true_negatives": 1541,
+          "flag_rate": 0.08849557522123894,
+          "precision": 0.4166666666666667,
+          "recall": 0.19329896907216496,
+          "f1": 0.2640845070422535
+        },
+        {
+          "threshold": 0.1,
+          "threshold_source": "sweep",
+          "true_positives": 75,
+          "false_positives": 105,
+          "false_negatives": 313,
+          "true_negatives": 1541,
+          "flag_rate": 0.08849557522123894,
+          "precision": 0.4166666666666667,
+          "recall": 0.19329896907216496,
+          "f1": 0.2640845070422535
+        },
+        {
+          "threshold": 0.2,
+          "threshold_source": "sweep",
+          "true_positives": 75,
+          "false_positives": 105,
+          "false_negatives": 313,
+          "true_negatives": 1541,
+          "flag_rate": 0.08849557522123894,
+          "precision": 0.4166666666666667,
+          "recall": 0.19329896907216496,
+          "f1": 0.2640845070422535
+        },
+        {
+          "threshold": 0.3,
+          "threshold_source": "sweep",
+          "true_positives": 75,
+          "false_positives": 105,
+          "false_negatives": 313,
+          "true_negatives": 1541,
+          "flag_rate": 0.08849557522123894,
+          "precision": 0.4166666666666667,
+          "recall": 0.19329896907216496,
+          "f1": 0.2640845070422535
+        },
+        {
+          "threshold": 0.5,
+          "threshold_source": "sweep",
+          "true_positives": 75,
+          "false_positives": 105,
+          "false_negatives": 313,
+          "true_negatives": 1541,
+          "flag_rate": 0.08849557522123894,
+          "precision": 0.4166666666666667,
+          "recall": 0.19329896907216496,
+          "f1": 0.2640845070422535
+        }
+      ],
+      "economics": {
+        "threshold": 0.34814814814814815,
+        "flag_rate": 0.08849557522123894,
+        "true_positives": 75,
+        "false_positives": 105,
+        "false_negatives": 313,
+        "true_negatives": 1541,
+        "gross_saving_inr": 9900.0,
+        "total_false_positive_cost_inr": 7402.5,
+        "residual_false_negative_loss_inr": 68860.0,
+        "net_inr_saved_per_1000_orders": {
+          "value": 1227.8761061946902,
+          "ci_low": 93.38126843657844,
+          "ci_high": 2490.191740412979,
+          "confidence": 0.95,
+          "n_bootstrap": 500
+        },
+        "baseline_net_inr_per_1000_orders": -41966.56833824976
+      },
+      "train_pr_auc": 0.2022669109008895,
+      "is_calibrated": false,
+      "notes": "Blanket COD block above a value. What many merchants actually do. Usually terrible - high recall, catastrophic precision, kills GMV. Worth showing precisely how bad.",
+      "data_provenance": "Synthetic benchmark data. Labels are simulated outcomes of the documented process in docs/simulator.md, not real-world ground truth. Absolute metric values are not a claim about production performance.",
+      "recorded_at": "2026-08-28T18:04:51.785692Z"
+    },
+    {
+      "experiment_id": "6940e0ee554dd7bb3d31",
+      "model_name": "pincode_blocklist",
+      "model_version": "aaf7e5ac59dd",
+      "rung_id": 2,
+      "rung_kind": "heuristic",
+      "generator_version": "1.0.0",
+      "dataset_run_id": "7b5ae86219ac7cafe45e7d51",
+      "feature_version": "1.0.0",
+      "feature_fingerprint": "798aef57ad3cefe94cfeeb9555287fefda16e0c502f236f7e226590923531dfb",
+      "config_fingerprint": "f3943b6937cf0b36164e1fec043e25fc8c4eab1bc684887d778f14a268ebf251",
+      "seed": 7,
+      "hyperparameters": {
+        "top_decile": 0.1,
+        "min_support": 10,
+        "random_state": 7
+      },
+      "families_used": [
+        "customer_history",
+        "temporal",
+        "order_shape",
+        "address_quality",
+        "session_intent",
+        "geography_route"
+      ],
+      "n_features": 54,
+      "trained_at": "2026-08-28T18:04:55.554496Z",
+      "train_duration_seconds": 0.021484999975655228,
+      "evaluated_split": "validation",
+      "split_strategy": "temporal_grouped",
+      "split_pool_shares": {
+        "train": 0.55,
+        "validation": 0.27,
+        "test": 0.18
+      },
+      "train_summary": {
+        "name": "train",
+        "n_rows": 23058,
+        "n_positives": 3871,
+        "positive_rate": 0.16788099574984822,
+        "n_customers": 8774,
+        "first_day": 1,
+        "last_day": 126,
+        "first_ordered_at": "2025-09-01T00:57:24Z",
+        "last_ordered_at": "2026-01-04T23:22:48Z"
+      },
+      "evaluation_summary": {
+        "name": "validation",
+        "n_rows": 2034,
+        "n_positives": 388,
+        "positive_rate": 0.19075712881022616,
+        "n_customers": 1529,
+        "first_day": 127,
+        "last_day": 147,
+        "first_ordered_at": "2026-01-05T00:34:58Z",
+        "last_ordered_at": "2026-01-25T23:42:01Z"
+      },
+      "ranking": {
+        "pr_auc": {
+          "value": 0.1957526799303488,
+          "ci_low": 0.17733452917545967,
+          "ci_high": 0.21437751339186945,
+          "confidence": 0.95,
+          "n_bootstrap": 500
+        },
+        "roc_auc": {
+          "value": 0.5116339517230148,
+          "ci_low": 0.4990999711616484,
+          "ci_high": 0.5250181904697391,
+          "confidence": 0.95,
+          "n_bootstrap": 500
+        },
+        "recall_at_precision_80": null,
+        "recall_at_precision_90": null,
+        "precision_at_k": {
+          "0.01": 0.4,
+          "0.05": 0.28431372549019607,
+          "0.10": 0.24630541871921183
+        }
+      },
+      "calibration": {
+        "expected_calibration_error": 0.21337266470009833,
+        "brier_score": 0.21337266470009833,
+        "n_bins": 10,
+        "reliability_bins": [
+          [
+            0.0,
+            0.18698347107438015,
+            1936
+          ],
+          [
+            1.0,
+            0.2653061224489796,
+            98
+          ]
+        ]
+      },
+      "threshold_metrics": [
+        {
+          "threshold": 0.34814814814814815,
+          "threshold_source": "cost-derived",
+          "true_positives": 26,
+          "false_positives": 72,
+          "false_negatives": 362,
+          "true_negatives": 1574,
+          "flag_rate": 0.048180924287118974,
+          "precision": 0.2653061224489796,
+          "recall": 0.06701030927835051,
+          "f1": 0.10699588477366255
+        },
+        {
+          "threshold": 0.1,
+          "threshold_source": "sweep",
+          "true_positives": 26,
+          "false_positives": 72,
+          "false_negatives": 362,
+          "true_negatives": 1574,
+          "flag_rate": 0.048180924287118974,
+          "precision": 0.2653061224489796,
+          "recall": 0.06701030927835051,
+          "f1": 0.10699588477366255
+        },
+        {
+          "threshold": 0.2,
+          "threshold_source": "sweep",
+          "true_positives": 26,
+          "false_positives": 72,
+          "false_negatives": 362,
+          "true_negatives": 1574,
+          "flag_rate": 0.048180924287118974,
+          "precision": 0.2653061224489796,
+          "recall": 0.06701030927835051,
+          "f1": 0.10699588477366255
+        },
+        {
+          "threshold": 0.3,
+          "threshold_source": "sweep",
+          "true_positives": 26,
+          "false_positives": 72,
+          "false_negatives": 362,
+          "true_negatives": 1574,
+          "flag_rate": 0.048180924287118974,
+          "precision": 0.2653061224489796,
+          "recall": 0.06701030927835051,
+          "f1": 0.10699588477366255
+        },
+        {
+          "threshold": 0.5,
+          "threshold_source": "sweep",
+          "true_positives": 26,
+          "false_positives": 72,
+          "false_negatives": 362,
+          "true_negatives": 1574,
+          "flag_rate": 0.048180924287118974,
+          "precision": 0.2653061224489796,
+          "recall": 0.06701030927835051,
+          "f1": 0.10699588477366255
+        }
+      ],
+      "economics": {
+        "threshold": 0.34814814814814815,
+        "flag_rate": 0.048180924287118974,
+        "true_positives": 26,
+        "false_positives": 72,
+        "false_negatives": 362,
+        "true_negatives": 1574,
+        "gross_saving_inr": 3432.0,
+        "total_false_positive_cost_inr": 5076.0,
+        "residual_false_negative_loss_inr": 79640.0,
+        "net_inr_saved_per_1000_orders": {
+          "value": -808.259587020649,
+          "ci_low": -1676.9911504424776,
+          "ci_high": 90.0811209439527,
+          "confidence": 0.95,
+          "n_bootstrap": 500
+        },
+        "baseline_net_inr_per_1000_orders": -41966.56833824976
+      },
+      "train_pr_auc": 0.21384095607477355,
+      "is_calibrated": false,
+      "notes": "The common smart heuristic. Demonstrates the fairness problem numerically and gives a real bar to beat.",
+      "data_provenance": "Synthetic benchmark data. Labels are simulated outcomes of the documented process in docs/simulator.md, not real-world ground truth. Absolute metric values are not a claim about production performance.",
+      "recorded_at": "2026-08-28T18:04:55.564599Z"
+    },
+    {
+      "experiment_id": "4d7c1db817ff4c9c2341",
+      "model_name": "logistic_regression",
+      "model_version": "18a8426b6df3",
+      "rung_id": 3,
+      "rung_kind": "model",
+      "generator_version": "1.0.0",
+      "dataset_run_id": "7b5ae86219ac7cafe45e7d51",
+      "feature_version": "1.0.0",
+      "feature_fingerprint": "798aef57ad3cefe94cfeeb9555287fefda16e0c502f236f7e226590923531dfb",
+      "config_fingerprint": "f3943b6937cf0b36164e1fec043e25fc8c4eab1bc684887d778f14a268ebf251",
+      "seed": 7,
+      "hyperparameters": {
+        "penalty": "l2",
+        "C": 1.0,
+        "class_weight": null,
+        "max_iter": 2000,
+        "monotonic_features": [
+          "prior_rto_rate",
+          "discount_depth"
+        ],
+        "random_state": 7
+      },
+      "families_used": [
+        "customer_history",
+        "temporal",
+        "order_shape",
+        "address_quality",
+        "session_intent",
+        "geography_route"
+      ],
+      "n_features": 54,
+      "trained_at": "2026-08-28T18:05:01.070985Z",
+      "train_duration_seconds": 1.2578412999864668,
+      "evaluated_split": "validation",
+      "split_strategy": "temporal_grouped",
+      "split_pool_shares": {
+        "train": 0.55,
+        "validation": 0.27,
+        "test": 0.18
+      },
+      "train_summary": {
+        "name": "train",
+        "n_rows": 23058,
+        "n_positives": 3871,
+        "positive_rate": 0.16788099574984822,
+        "n_customers": 8774,
+        "first_day": 1,
+        "last_day": 126,
+        "first_ordered_at": "2025-09-01T00:57:24Z",
+        "last_ordered_at": "2026-01-04T23:22:48Z"
+      },
+      "evaluation_summary": {
+        "name": "validation",
+        "n_rows": 2034,
+        "n_positives": 388,
+        "positive_rate": 0.19075712881022616,
+        "n_customers": 1529,
+        "first_day": 127,
+        "last_day": 147,
+        "first_ordered_at": "2026-01-05T00:34:58Z",
+        "last_ordered_at": "2026-01-25T23:42:01Z"
+      },
+      "ranking": {
+        "pr_auc": {
+          "value": 0.483066371734196,
+          "ci_low": 0.43863274220351084,
+          "ci_high": 0.535154934437848,
+          "confidence": 0.95,
+          "n_bootstrap": 500
+        },
+        "roc_auc": {
+          "value": 0.799102165825306,
+          "ci_low": 0.7779585276896976,
+          "ci_high": 0.8218104427979092,
+          "confidence": 0.95,
+          "n_bootstrap": 500
+        },
+        "recall_at_precision_80": 0.0979381443298969,
+        "recall_at_precision_90": 0.06958762886597938,
+        "precision_at_k": {
+          "0.01": 0.9,
+          "0.05": 0.6470588235294118,
+          "0.10": 0.5172413793103449
+        }
+      },
+      "calibration": {
+        "expected_calibration_error": 0.024386575133088357,
+        "brier_score": 0.12560813647047783,
+        "n_bins": 10,
+        "reliability_bins": [
+          [
+            0.02466287423191654,
+            0.0295159386068477,
+            847
+          ],
+          [
+            0.153680635798179,
+            0.1893939393939394,
+            396
+          ],
+          [
+            0.24385543543918223,
+            0.27445652173913043,
+            368
+          ],
+          [
+            0.34442310210922533,
+            0.37037037037037035,
+            216
+          ],
+          [
+            0.4510568202861101,
+            0.41414141414141414,
+            99
+          ],
+          [
+            0.5429542207944984,
+            0.45901639344262296,
+            61
+          ],
+          [
+            0.6456116151239429,
+            0.7741935483870968,
+            31
+          ],
+          [
+            0.7304634234730474,
+            0.9,
+            10
+          ],
+          [
+            0.8378719992015081,
+            0.8333333333333334,
+            6
+          ]
+        ]
+      },
+      "threshold_metrics": [
+        {
+          "threshold": 0.34814814814814815,
+          "threshold_source": "cost-derived",
+          "true_positives": 139,
+          "false_positives": 158,
+          "false_negatives": 249,
+          "true_negatives": 1488,
+          "flag_rate": 0.14601769911504425,
+          "precision": 0.468013468013468,
+          "recall": 0.3582474226804124,
+          "f1": 0.40583941605839413
+        },
+        {
+          "threshold": 0.1,
+          "threshold_source": "sweep",
+          "true_positives": 363,
+          "false_positives": 824,
+          "false_negatives": 25,
+          "true_negatives": 822,
+          "flag_rate": 0.5835791543756146,
+          "precision": 0.3058129738837405,
+          "recall": 0.9355670103092784,
+          "f1": 0.4609523809523809
+        },
+        {
+          "threshold": 0.2,
+          "threshold_source": "sweep",
+          "true_positives": 288,
+          "false_positives": 503,
+          "false_negatives": 100,
+          "true_negatives": 1143,
+          "flag_rate": 0.3888888888888889,
+          "precision": 0.3640960809102402,
+          "recall": 0.7422680412371134,
+          "f1": 0.48854961832061067
+        },
+        {
+          "threshold": 0.3,
+          "threshold_source": "sweep",
+          "true_positives": 187,
+          "false_positives": 236,
+          "false_negatives": 201,
+          "true_negatives": 1410,
+          "flag_rate": 0.2079646017699115,
+          "precision": 0.44208037825059104,
+          "recall": 0.48195876288659795,
+          "f1": 0.46115906288532676
+        },
+        {
+          "threshold": 0.5,
+          "threshold_source": "sweep",
+          "true_positives": 66,
+          "false_positives": 42,
+          "false_negatives": 322,
+          "true_negatives": 1604,
+          "flag_rate": 0.05309734513274336,
+          "precision": 0.6111111111111112,
+          "recall": 0.17010309278350516,
+          "f1": 0.2661290322580645
+        }
+      ],
+      "economics": {
+        "threshold": 0.34814814814814815,
+        "flag_rate": 0.14601769911504425,
+        "true_positives": 139,
+        "false_positives": 158,
+        "false_negatives": 249,
+        "true_negatives": 1488,
+        "gross_saving_inr": 18348.0,
+        "total_false_positive_cost_inr": 11139.0,
+        "residual_false_negative_loss_inr": 54780.0,
+        "net_inr_saved_per_1000_orders": {
+          "value": 3544.2477876106195,
+          "ci_low": 1866.7957227138643,
+          "ci_high": 5306.895280235987,
+          "confidence": 0.95,
+          "n_bootstrap": 500
+        },
+        "baseline_net_inr_per_1000_orders": -41966.56833824976
+      },
+      "train_pr_auc": 0.43974970888320036,
+      "is_calibrated": false,
+      "notes": "Interpretable, fast, calibrated by construction. Surprisingly hard to beat and a genuine shipping candidate.",
+      "data_provenance": "Synthetic benchmark data. Labels are simulated outcomes of the documented process in docs/simulator.md, not real-world ground truth. Absolute metric values are not a claim about production performance.",
+      "recorded_at": "2026-08-28T18:05:01.081304Z"
+    },
+    {
+      "experiment_id": "7b5d46d500aab95247c5",
+      "model_name": "lightgbm",
+      "model_version": "a969229da41d",
+      "rung_id": 4,
+      "rung_kind": "model",
+      "generator_version": "1.0.0",
+      "dataset_run_id": "7b5ae86219ac7cafe45e7d51",
+      "feature_version": "1.0.0",
+      "feature_fingerprint": "798aef57ad3cefe94cfeeb9555287fefda16e0c502f236f7e226590923531dfb",
+      "config_fingerprint": "f3943b6937cf0b36164e1fec043e25fc8c4eab1bc684887d778f14a268ebf251",
+      "seed": 7,
+      "hyperparameters": {
+        "objective": "binary",
+        "n_estimators": 600,
+        "learning_rate": 0.05,
+        "num_leaves": 31,
+        "min_child_samples": 40,
+        "subsample": 0.9,
+        "colsample_bytree": 0.8,
+        "scale_pos_weight": 1.0,
+        "random_state": 7
+      },
+      "families_used": [
+        "customer_history",
+        "temporal",
+        "order_shape",
+        "address_quality",
+        "session_intent",
+        "geography_route"
+      ],
+      "n_features": 54,
+      "trained_at": "2026-08-28T18:05:13.302577Z",
+      "train_duration_seconds": 5.391954899998382,
+      "evaluated_split": "validation",
+      "split_strategy": "temporal_grouped",
+      "split_pool_shares": {
+        "train": 0.55,
+        "validation": 0.27,
+        "test": 0.18
+      },
+      "train_summary": {
+        "name": "train",
+        "n_rows": 23058,
+        "n_positives": 3871,
+        "positive_rate": 0.16788099574984822,
+        "n_customers": 8774,
+        "first_day": 1,
+        "last_day": 126,
+        "first_ordered_at": "2025-09-01T00:57:24Z",
+        "last_ordered_at": "2026-01-04T23:22:48Z"
+      },
+      "evaluation_summary": {
+        "name": "validation",
+        "n_rows": 2034,
+        "n_positives": 388,
+        "positive_rate": 0.19075712881022616,
+        "n_customers": 1529,
+        "first_day": 127,
+        "last_day": 147,
+        "first_ordered_at": "2026-01-05T00:34:58Z",
+        "last_ordered_at": "2026-01-25T23:42:01Z"
+      },
+      "ranking": {
+        "pr_auc": {
+          "value": 0.4429588863302478,
+          "ci_low": 0.397110452044688,
+          "ci_high": 0.5009271253013167,
+          "confidence": 0.95,
+          "n_bootstrap": 500
+        },
+        "roc_auc": {
+          "value": 0.7903273790883242,
+          "ci_low": 0.7674217240259296,
+          "ci_high": 0.8148841944076485,
+          "confidence": 0.95,
+          "n_bootstrap": 500
+        },
+        "recall_at_precision_80": 0.04381443298969072,
+        "recall_at_precision_90": null,
+        "precision_at_k": {
+          "0.01": 0.8,
+          "0.05": 0.5784313725490197,
+          "0.10": 0.4827586206896552
+        }
+      },
+      "calibration": {
+        "expected_calibration_error": 0.055800684058798004,
+        "brier_score": 0.1323795843066755,
+        "n_bins": 10,
+        "reliability_bins": [
+          [
+            0.02673860552006268,
+            0.05422794117647059,
+            1088
+          ],
+          [
+            0.1438860415817423,
+            0.26704545454545453,
+            352
+          ],
+          [
+            0.24795745218569373,
+            0.3217391304347826,
+            230
+          ],
+          [
+            0.3464313929903751,
+            0.38926174496644295,
+            149
+          ],
+          [
+            0.44459195548288255,
+            0.41304347826086957,
+            92
+          ],
+          [
+            0.5468962492181534,
+            0.4375,
+            48
+          ],
+          [
+            0.6396993183756003,
+            0.5238095238095238,
+            42
+          ],
+          [
+            0.7452927353780273,
+            0.5714285714285714,
+            21
+          ],
+          [
+            0.8512144745718104,
+            0.8333333333333334,
+            12
+          ]
+        ]
+      },
+      "threshold_metrics": [
+        {
+          "threshold": 0.34814814814814815,
+          "threshold_source": "cost-derived",
+          "true_positives": 132,
+          "false_positives": 152,
+          "false_negatives": 256,
+          "true_negatives": 1494,
+          "flag_rate": 0.13962635201573254,
+          "precision": 0.4647887323943662,
+          "recall": 0.3402061855670103,
+          "f1": 0.3928571428571429
+        },
+        {
+          "threshold": 0.1,
+          "threshold_source": "sweep",
+          "true_positives": 329,
+          "false_positives": 617,
+          "false_negatives": 59,
+          "true_negatives": 1029,
+          "flag_rate": 0.46509341199606685,
+          "precision": 0.3477801268498943,
+          "recall": 0.8479381443298969,
+          "f1": 0.49325337331334335
+        },
+        {
+          "threshold": 0.2,
+          "threshold_source": "sweep",
+          "true_positives": 235,
+          "false_positives": 359,
+          "false_negatives": 153,
+          "true_negatives": 1287,
+          "flag_rate": 0.2920353982300885,
+          "precision": 0.3956228956228956,
+          "recall": 0.6056701030927835,
+          "f1": 0.47861507128309566
+        },
+        {
+          "threshold": 0.3,
+          "threshold_source": "sweep",
+          "true_positives": 161,
+          "false_positives": 203,
+          "false_negatives": 227,
+          "true_negatives": 1443,
+          "flag_rate": 0.17895771878072764,
+          "precision": 0.4423076923076923,
+          "recall": 0.41494845360824745,
+          "f1": 0.42819148936170215
+        },
+        {
+          "threshold": 0.5,
+          "threshold_source": "sweep",
+          "true_positives": 65,
+          "false_positives": 58,
+          "false_negatives": 323,
+          "true_negatives": 1588,
+          "flag_rate": 0.06047197640117994,
+          "precision": 0.5284552845528455,
+          "recall": 0.16752577319587628,
+          "f1": 0.25440313111545987
+        }
+      ],
+      "economics": {
+        "threshold": 0.34814814814814815,
+        "flag_rate": 0.13962635201573254,
+        "true_positives": 132,
+        "false_positives": 152,
+        "false_negatives": 256,
+        "true_negatives": 1494,
+        "gross_saving_inr": 17424.0,
+        "total_false_positive_cost_inr": 10716.0,
+        "residual_false_negative_loss_inr": 56320.0,
+        "net_inr_saved_per_1000_orders": {
+          "value": 3297.935103244838,
+          "ci_low": 1615.3945427728615,
+          "ci_high": 5024.944690265486,
+          "confidence": 0.95,
+          "n_bootstrap": 500
+        },
+        "baseline_net_inr_per_1000_orders": -41966.56833824976
+      },
+      "train_pr_auc": 0.9618811695804551,
+      "is_calibrated": false,
+      "notes": "The expected winner. Handles interactions and missingness natively; isotonic regression on the validation fold fixes the score distortion raw boosting produces.",
+      "data_provenance": "Synthetic benchmark data. Labels are simulated outcomes of the documented process in docs/simulator.md, not real-world ground truth. Absolute metric values are not a claim about production performance.",
+      "recorded_at": "2026-08-28T18:05:13.311317Z"
+    }
+  ],
+  "created_at": "2026-08-28T18:05:13.591020Z"
+}

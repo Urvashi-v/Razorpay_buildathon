@@ -44,6 +44,19 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 MODELLING_SPLITS = ("train", "validation", "test")
 SplitName = Literal["train", "validation", "test"]
 
+#: Raw operational columns carried alongside the design matrix for the heuristic
+#: rungs. These are NOT features - ``pincode`` in particular is refused to every
+#: learned model - but rungs 1 and 2 reproduce operational policies that use them,
+#: and measuring what those policies cost requires giving them the real inputs.
+CONTEXT_COLUMNS = (
+    cols.PINCODE,
+    cols.PINCODE_TIER,
+    cols.IS_COD,
+    cols.ORDER_VALUE_INR,
+    cols.CATEGORY,
+    cols.COURIER_PARTNER,
+)
+
 
 class TestSetAccessError(RuntimeError):
     """Raised on an attempt to read the sealed test split without unsealing it.
@@ -78,6 +91,11 @@ class SplitView:
     customer_hashes: pd.Series
     ordered_at: pd.Series
     day_index: pd.Series
+    #: Raw operational columns the HEURISTIC rungs need and the learned rungs are
+    #: forbidden from using - pincode above all. Kept as a separate attribute
+    #: from ``x`` so the separation is structural: a model reaching for pincode
+    #: has to accept a different argument to get it. See ``models/base.py``.
+    context: pd.DataFrame
 
     def __len__(self) -> int:
         return len(self.x)
@@ -129,6 +147,7 @@ class ModelingDataset:
     customer_hashes: pd.Series
     ordered_at: pd.Series
     day_index: pd.Series
+    context: pd.DataFrame
     feature_set: FeatureSet
     metadata: DatasetMetadata
 
@@ -170,6 +189,7 @@ class ModelingDataset:
             customer_hashes=self.customer_hashes.loc[mask],
             ordered_at=self.ordered_at.loc[mask],
             day_index=self.day_index.loc[mask],
+            context=self.context.loc[mask],
         )
 
     @property
@@ -318,6 +338,7 @@ def build_modeling_dataset(
 
     return ModelingDataset(
         features=features,
+        context=subset[list(CONTEXT_COLUMNS)].copy(),
         labels=subset[cols.IS_RTO].astype(bool),
         splits=subset[cols.SPLIT].astype(str),
         order_ids=subset[cols.ORDER_ID],

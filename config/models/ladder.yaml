@@ -30,7 +30,17 @@ rungs:
     enabled: true
     params:
       top_decile: 0.10
-      min_support: 30
+      # DELIBERATELY LOWER than the min_support of 30 that guards the smoothed
+      # pincode FEATURE. This baseline is an opponent, and it should be given the
+      # benefit of the doubt: a merchant building a blocklist uses whatever
+      # evidence they have, not the conservative bar this project imposes on
+      # itself. At 30 the blocklist came out with four pincodes in it and flagged
+      # 0.5% of orders, which is a strawman rather than a baseline.
+      #
+      # The asymmetry is the point. Beating a baseline that was handed looser
+      # rules than the model gets means something; beating one that was
+      # hamstrung does not.
+      min_support: 10
     description: "The common smart heuristic. Demonstrates the fairness problem
                   numerically and gives a real bar to beat."
 
@@ -48,7 +58,7 @@ rungs:
                   hard to beat and a genuine shipping candidate."
 
   - id: 4
-    name: lightgbm_isotonic
+    name: lightgbm
     kind: model
     enabled: true
     params:

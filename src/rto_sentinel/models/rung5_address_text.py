@@ -1,47 +1,28 @@
 """Rung 5: rung 4 plus a text encoder over address strings.
 
-STATUS: Phase 2-3.
+NOT IMPLEMENTED, and disabled in ``config/models/ladder.yaml``. Deliberately not
+registered in ``models/registry.py`` either, so a configuration typo fails at
+lookup rather than much later.
+
+SPEC section 05 makes this rung conditional: attempted only if time permits, and
+promoted only if it beats rung 4 on **net rupees** - not on AUC. A rung that wins
+a ranking metric and loses the cost metric has not earned production.
+
+THE FAIRNESS PROBLEM IS SHARPER HERE THAN ANYWHERE ELSE ON THE LADDER
+=====================================================================
+An encoder over raw address text can learn regional language and transliteration
+patterns. That is a protected-attribute proxy arriving by a route the refused-
+feature list does not cover, because it never names a forbidden column - it
+learns the same information from free text.
+
+The existing address features avoid this by construction: they measure structural
+completeness (is there a house number, does the city match the pincode) and never
+fluency. A text encoder erases that distinction.
+
+If this rung is ever built, the fairness audit gates it, and the bar is higher
+than for any other rung: it must show a material rupee gain **and** no disparate
+impact, because the mechanism by which it could cause harm is one this project's
+other defences do not catch.
 """
 
 from __future__ import annotations
-
-from pathlib import Path
-from typing import TYPE_CHECKING
-
-from rto_sentinel.models.base import RiskModel
-
-if TYPE_CHECKING:  # pragma: no cover - typing only
-    import numpy as np
-    import pandas as pd
-
-    from rto_sentinel.contracts.risk import ModelCard
-    from rto_sentinel.models.base import RiskModel
-
-
-class LightGbmAddressTextModel(RiskModel):
-    """Rung 5: rung 4 plus a text encoder over address strings.
-
-    Attempted only if time permits, and promoted only if it beats rung 4 on NET
-    RUPEES - not on AUC. A rung that wins on a ranking metric and loses on the
-    cost metric has not earned a place in production.
-
-    Disabled in config by default. The fairness question is sharper here than
-    anywhere else in the ladder: an encoder over raw address text can learn
-    regional language patterns, which is a protected-attribute proxy by another
-    route. If this rung is ever enabled, the fairness audit gates it."""
-
-    rung_id = 5
-    name = "lightgbm_address_text"
-
-    def fit(self, x: pd.DataFrame, y: pd.Series) -> None:
-        raise NotImplementedError("Rung 5 training lands in Phase 3.")
-
-    def predict_proba(self, x: pd.DataFrame) -> np.ndarray:
-        raise NotImplementedError("Rung 5 inference lands in Phase 3.")
-
-    def save(self, path: Path, card: ModelCard) -> None:
-        raise NotImplementedError("Rung 5 persistence lands in Phase 3.")
-
-    @classmethod
-    def load(cls, path: Path) -> tuple[RiskModel, ModelCard]:
-        raise NotImplementedError("Rung 5 persistence lands in Phase 3.")

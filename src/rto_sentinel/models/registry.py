@@ -1,10 +1,13 @@
 """Maps ladder rung names to their implementations.
 
-One lookup table so that the training script, the evaluation harness and the API
-all resolve a rung the same way, and adding a rung means touching this file and
+One lookup table so the training script, the evaluation harness and the API all
+resolve a rung the same way. Adding a rung means touching this file and
 ``config/models/ladder.yaml`` and nothing else.
 
-STATUS: Phase 3.
+Rung 5 (a text encoder over address strings) is deliberately absent: it is
+disabled in config and unimplemented, and registering a name with no
+implementation would let a configuration typo produce a confusing failure much
+later than it should.
 """
 
 from __future__ import annotations
@@ -15,15 +18,13 @@ from rto_sentinel.models.rung1_blanket_block import BlanketCodBlockModel
 from rto_sentinel.models.rung2_pincode_blocklist import PincodeBlocklistModel
 from rto_sentinel.models.rung3_logistic import LogisticRegressionModel
 from rto_sentinel.models.rung4_lightgbm import LightGbmModel
-from rto_sentinel.models.rung5_address_text import LightGbmAddressTextModel
 
 RUNG_REGISTRY: dict[str, type[RiskModel]] = {
     "do_nothing": DoNothingModel,
     "blanket_cod_block": BlanketCodBlockModel,
     "pincode_blocklist": PincodeBlocklistModel,
     "logistic_regression": LogisticRegressionModel,
-    "lightgbm_isotonic": LightGbmModel,
-    "lightgbm_address_text": LightGbmAddressTextModel,
+    "lightgbm": LightGbmModel,
 }
 
 

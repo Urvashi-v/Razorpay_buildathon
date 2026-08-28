@@ -12,8 +12,8 @@ a shell without a notebook anywhere in the loop::
     rto-sentinel features list                # every feature and its definition
     rto-sentinel features docs                # regenerate docs/features.md
     rto-sentinel build-dataset --seed 42 ...  # generate + split + build features
-    rto-sentinel train --rung 4               # train one ladder rung   (Phase 3)
-    rto-sentinel evaluate                     # score a model           (Phase 4)
+    rto-sentinel train --seed 42 ...          # train and evaluate the whole ladder
+    rto-sentinel evaluate                     # re-render from saved artefacts
     rto-sentinel serve                        # run the API
 
 Every generation records its seed, generator version, configuration snapshot and
@@ -27,12 +27,15 @@ import argparse
 import sys
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from typing import TYPE_CHECKING
 
 from rto_sentinel import __version__
 from rto_sentinel.configuration import (
     ConfigurationError,
     config_fingerprint,
     load_app_config,
+    load_evaluation_config,
     load_generator_config,
     load_splits_config,
 )
@@ -41,6 +44,12 @@ from rto_sentinel.data.generator import SUPPORTED_GENERATOR_VERSIONS, GeneratorP
 from rto_sentinel.data.pipeline import build_dataset
 from rto_sentinel.data.validation import validate_delivery_events, validate_orders
 from rto_sentinel.settings import REPO_ROOT, Settings, get_settings
+
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    import pandas as pd
+
+    from rto_sentinel.contracts.experiment import LadderResults
+    from rto_sentinel.features.dataset import ModelingDataset
 
 # ---------------------------------------------------------------------------
 # config
@@ -417,6 +426,184 @@ def _cmd_build_dataset(args: argparse.Namespace) -> int:
     return 0
 
 
+# ---------------------------------------------------------------------------
+# training and evaluation
+# ---------------------------------------------------------------------------
+
+
+def _load_or_build_dataset(
+    args: argparse.Namespace, settings: Settings
+) -> tuple[ModelingDataset, GeneratorParams]:
+    """Build the modelling dataset the ladder trains on.
+
+    Regenerated from the seed rather than loaded from a parquet artefact. The
+    generator is deterministic, so this costs time and buys certainty that the
+    features being trained on came from the configuration currently on disk.
+    """
+    from rto_sentinel.configuration import load_features_config
+    from rto_sentinel.data.splits import assign_splits
+    from rto_sentinel.features import build_modeling_dataset
+
+    params = _resolve_params(args, settings)
+    generator_config = load_generator_config(settings)
+    splits_config = load_splits_config(settings)
+
+    print(
+        f"generating {params.n_orders:,} orders for {params.n_customers:,} customers "
+        f"(seed {params.seed}, generator {params.generator_version})"
+    )
+    pipeline_result = build_dataset(
+        generator_config=generator_config,
+        splits_config=splits_config,
+        params=params,
+        artifact_root=None if args.no_write else settings.artifact_path,
+        strict=not args.lenient,
+    )
+    if not pipeline_result.ok:
+        print(pipeline_result.render(), file=sys.stderr)
+        msg = "dataset validation failed; refusing to train on it"
+        raise SystemExit(msg)
+
+    dataset = build_modeling_dataset(
+        pipeline_result.dataset,
+        features_config=load_features_config(settings),
+        generator_config=generator_config,
+        splits_config=splits_config,
+        split_labels=assign_splits(pipeline_result.dataset.orders, splits_config).labels,
+    )
+    return dataset, params
+
+
+def _cmd_train(args: argparse.Namespace) -> int:
+    """Train and evaluate every enabled rung of the baseline ladder."""
+    from rto_sentinel.configuration import load_cost_model_config, load_ladder_config
+    from rto_sentinel.eval import comparison_table, strongest_rung, write_report
+    from rto_sentinel.models import run_ladder, save_results, scores_frame
+
+    settings = get_settings()
+    dataset, params = _load_or_build_dataset(args, settings)
+
+    print(
+        f"\ntrain={dataset.train.n_rows:,}  validation={dataset.validation.n_rows:,}  "
+        f"features={len(dataset.feature_set)}  "
+        f"positive rate (validation)={dataset.validation.positive_rate:.4f}"
+    )
+    if args.split == "test":
+        # Deliberately loud. Reaching the sealed split is a one-time act at the
+        # very end of the project, after the threshold has been fixed on
+        # validation, and it should never happen by habit.
+        print(
+            "\n!! SEALED TEST SET REQUESTED. This is the single final evaluation.",
+            file=sys.stderr,
+        )
+        dataset.unseal_test(reason=args.unseal_reason or "explicit --split test on the CLI")
+
+    print("\ntraining the ladder...")
+    results, trained = run_ladder(
+        dataset,
+        ladder_config=load_ladder_config(settings),
+        cost_config=load_cost_model_config(settings),
+        seed=params.seed,
+        evaluation_split=args.split,
+        artifact_root=settings.artifact_path if not args.no_write else None,
+        bootstrap_iterations=args.bootstrap,
+    )
+
+    print(f"\noperating threshold: {results.threshold:.4f}")
+    print(f"  {results.threshold_source}")
+    print()
+    print(comparison_table(results))
+
+    baseline = results.records[0].economics
+    if baseline is not None:
+        print(
+            f"\ndo-nothing absorbs INR {abs(baseline.baseline_net_inr_per_1000_orders):,.0f} "
+            "per 1,000 orders. net/1k above is the saving relative to that."
+        )
+
+    best = strongest_rung(results)
+    net = best.economics.net_inr_saved_per_1000_orders if best.economics else None
+    print(
+        f"\nstrongest on net rupees: {best.model_name} (rung {best.rung_id})"
+        + (f" at INR {net.value:,.0f} per 1,000 orders" if net else "")
+    )
+    print("every rung here is UNCALIBRATED; calibration lands in Phase 5.")
+
+    if args.no_write:
+        return 0
+
+    results_path = save_results(results, settings.artifact_path)
+    print(f"\nmachine-readable results : {results_path}")
+
+    scores = scores_frame(dataset, trained, args.split)
+    scores_path = (
+        settings.artifact_path
+        / "experiments"
+        / results.dataset_run_id
+        / f"scores__{args.split}.parquet"
+    )
+    scores.to_parquet(scores_path, index=False)
+    print(f"per-order scores         : {scores_path}")
+
+    report_path = write_report(
+        results,
+        REPO_ROOT / "docs" / "ladder_results.md",
+        load_evaluation_config(settings),
+    )
+    print(f"report                   : {report_path}")
+
+    for path in _write_plots(results, scores, settings):
+        print(f"plot                     : {path}")
+
+    for name, run in trained.items():
+        if run.artifact_path is not None:
+            print(f"model artefact           : {name} -> {run.artifact_path}")
+    return 0
+
+
+def _write_plots(results: LadderResults, scores: pd.DataFrame, settings: Settings) -> list[Path]:
+    from rto_sentinel.configuration import load_cost_model_config
+    from rto_sentinel.eval.plots import generate_all
+    from rto_sentinel.models.experiment import _cost_inputs
+
+    cost_config = load_cost_model_config(settings)
+    cost_inputs = _cost_inputs(cost_config.profiles[results.cost_profile])
+    output = settings.artifact_path / "reports" / results.dataset_run_id
+    return generate_all(results, scores, cost_inputs, output)
+
+
+def _cmd_evaluate(args: argparse.Namespace) -> int:
+    """Re-render the comparison from saved experiment artefacts.
+
+    Reads the machine-readable results rather than retraining, which is the
+    point: a reported number should be reproducible from the artefact, not only
+    from a fresh run.
+    """
+    from rto_sentinel.contracts.experiment import LadderResults
+    from rto_sentinel.eval import comparison_table, strongest_rung
+
+    settings = get_settings()
+    root = settings.artifact_path / "experiments"
+    candidates = sorted(root.rglob("ladder__*.json")) if root.is_dir() else []
+    if not candidates:
+        print("no ladder results found. Run `rto-sentinel train` first.", file=sys.stderr)
+        return 1
+
+    target = max(candidates, key=lambda path: path.stat().st_mtime)
+    results = LadderResults.model_validate_json(target.read_text(encoding="utf-8"))
+
+    print(f"results from {target}")
+    print(
+        f"  dataset {results.dataset_run_id}  split {results.evaluated_split}  seed {results.seed}"
+    )
+    print(f"  threshold {results.threshold:.4f}")
+    print()
+    print(comparison_table(results))
+    best = strongest_rung(results)
+    print(f"\nstrongest on net rupees: {best.model_name} (rung {best.rung_id})")
+    return 0
+
+
 def _cmd_serve(args: argparse.Namespace) -> int:
     """Run the API with uvicorn."""
     import uvicorn
@@ -519,12 +706,32 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--reload", action="store_true")
     serve.set_defaults(func=_cmd_serve)
 
-    for name, phase, help_text in (
-        ("train", "Phase 3", "train one rung of the baseline ladder"),
-        ("evaluate", "Phase 4", "score a model and write an evaluation report"),
-    ):
-        stub = sub.add_parser(name, help=f"{help_text} ({phase})")
-        stub.set_defaults(func=_cmd_not_implemented, command=name, phase=phase)
+    train = sub.add_parser("train", help="train and evaluate the whole baseline ladder")
+    _add_generation_arguments(train)
+    train.add_argument("--no-write", action="store_true", help="skip writing artefacts")
+    train.add_argument(
+        "--split",
+        default="validation",
+        choices=["validation", "test"],
+        help="which split to evaluate on. 'test' unseals the sealed set - once, at the end.",
+    )
+    train.add_argument(
+        "--unseal-reason",
+        default=None,
+        help="written justification, required in spirit when --split test is used",
+    )
+    train.add_argument(
+        "--bootstrap",
+        type=int,
+        default=500,
+        help="bootstrap iterations for confidence intervals (0 disables, tests only)",
+    )
+    train.set_defaults(func=_cmd_train)
+
+    evaluate = sub.add_parser(
+        "evaluate", help="re-render the comparison from saved experiment artefacts"
+    )
+    evaluate.set_defaults(func=_cmd_evaluate)
 
     return parser
 

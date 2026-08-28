@@ -85,8 +85,24 @@ class ModelCard(BaseModel):
     training_rows: int
     feature_names: tuple[str, ...]
     enabled_families: tuple[str, ...]
-    calibration_method: str | None
-    calibration_fitted_on: str | None
     random_seed: int
     config_fingerprint: str
+
+    #: Which feature declarations produced the matrix this was trained on. A
+    #: model loaded against a different feature set is a silent wrong answer, so
+    #: the fingerprint travels with the artefact and ``verify_provenance``
+    #: compares it.
+    feature_fingerprint: str = ""
+    feature_version: str = ""
+    #: Which dataset. Deterministic, so the exact training data is recoverable.
+    dataset_run_id: str = ""
+    generator_version: str = ""
+
+    #: None until Phase 5. The decision engine refuses a score whose calibration
+    #: method is None, so this field is what physically prevents an uncalibrated
+    #: model from reaching a decision.
+    calibration_method: str | None = None
+    calibration_fitted_on: str | None = None
+
+    hyperparameters: dict[str, object] = Field(default_factory=dict)
     notes: str = ""

@@ -1,0 +1,184 @@
+{
+  "calibration": {
+    "brier_score": 0.21337266470009833,
+    "expected_calibration_error": 0.21337266470009833,
+    "n_bins": 10,
+    "reliability_bins": [
+      [
+        0.0,
+        0.18698347107438015,
+        1936
+      ],
+      [
+        1.0,
+        0.2653061224489796,
+        98
+      ]
+    ]
+  },
+  "config_fingerprint": "f3943b6937cf0b36164e1fec043e25fc8c4eab1bc684887d778f14a268ebf251",
+  "data_provenance": "Synthetic benchmark data. Labels are simulated outcomes of the documented process in docs/simulator.md, not real-world ground truth. Absolute metric values are not a claim about production performance.",
+  "dataset_run_id": "7b5ae86219ac7cafe45e7d51",
+  "economics": {
+    "baseline_net_inr_per_1000_orders": -41966.56833824976,
+    "false_negatives": 362,
+    "false_positives": 72,
+    "flag_rate": 0.048180924287118974,
+    "gross_saving_inr": 3432.0,
+    "net_inr_saved_per_1000_orders": {
+      "ci_high": 90.0811209439527,
+      "ci_low": -1676.9911504424776,
+      "confidence": 0.95,
+      "n_bootstrap": 500,
+      "value": -808.259587020649
+    },
+    "residual_false_negative_loss_inr": 79640.0,
+    "threshold": 0.34814814814814815,
+    "total_false_positive_cost_inr": 5076.0,
+    "true_negatives": 1574,
+    "true_positives": 26
+  },
+  "evaluated_split": "validation",
+  "evaluation_summary": {
+    "first_day": 127,
+    "first_ordered_at": "2026-01-05T00:34:58Z",
+    "last_day": 147,
+    "last_ordered_at": "2026-01-25T23:42:01Z",
+    "n_customers": 1529,
+    "n_positives": 388,
+    "n_rows": 2034,
+    "name": "validation",
+    "positive_rate": 0.19075712881022616
+  },
+  "experiment_id": "6940e0ee554dd7bb3d31",
+  "families_used": [
+    "customer_history",
+    "temporal",
+    "order_shape",
+    "address_quality",
+    "session_intent",
+    "geography_route"
+  ],
+  "feature_fingerprint": "798aef57ad3cefe94cfeeb9555287fefda16e0c502f236f7e226590923531dfb",
+  "feature_version": "1.0.0",
+  "generator_version": "1.0.0",
+  "hyperparameters": {
+    "min_support": 10,
+    "random_state": 7,
+    "top_decile": 0.1
+  },
+  "is_calibrated": false,
+  "model_name": "pincode_blocklist",
+  "model_version": "aaf7e5ac59dd",
+  "n_features": 54,
+  "notes": "The common smart heuristic. Demonstrates the fairness problem numerically and gives a real bar to beat.",
+  "ranking": {
+    "pr_auc": {
+      "ci_high": 0.21437751339186945,
+      "ci_low": 0.17733452917545967,
+      "confidence": 0.95,
+      "n_bootstrap": 500,
+      "value": 0.1957526799303488
+    },
+    "precision_at_k": {
+      "0.01": 0.4,
+      "0.05": 0.28431372549019607,
+      "0.10": 0.24630541871921183
+    },
+    "recall_at_precision_80": null,
+    "recall_at_precision_90": null,
+    "roc_auc": {
+      "ci_high": 0.5250181904697391,
+      "ci_low": 0.4990999711616484,
+      "confidence": 0.95,
+      "n_bootstrap": 500,
+      "value": 0.5116339517230148
+    }
+  },
+  "recorded_at": "2026-08-28T18:04:55.564599Z",
+  "rung_id": 2,
+  "rung_kind": "heuristic",
+  "seed": 7,
+  "split_pool_shares": {
+    "test": 0.18,
+    "train": 0.55,
+    "validation": 0.27
+  },
+  "split_strategy": "temporal_grouped",
+  "threshold_metrics": [
+    {
+      "f1": 0.10699588477366255,
+      "false_negatives": 362,
+      "false_positives": 72,
+      "flag_rate": 0.048180924287118974,
+      "precision": 0.2653061224489796,
+      "recall": 0.06701030927835051,
+      "threshold": 0.34814814814814815,
+      "threshold_source": "cost-derived",
+      "true_negatives": 1574,
+      "true_positives": 26
+    },
+    {
+      "f1": 0.10699588477366255,
+      "false_negatives": 362,
+      "false_positives": 72,
+      "flag_rate": 0.048180924287118974,
+      "precision": 0.2653061224489796,
+      "recall": 0.06701030927835051,
+      "threshold": 0.1,
+      "threshold_source": "sweep",
+      "true_negatives": 1574,
+      "true_positives": 26
+    },
+    {
+      "f1": 0.10699588477366255,
+      "false_negatives": 362,
+      "false_positives": 72,
+      "flag_rate": 0.048180924287118974,
+      "precision": 0.2653061224489796,
+      "recall": 0.06701030927835051,
+      "threshold": 0.2,
+      "threshold_source": "sweep",
+      "true_negatives": 1574,
+      "true_positives": 26
+    },
+    {
+      "f1": 0.10699588477366255,
+      "false_negatives": 362,
+      "false_positives": 72,
+      "flag_rate": 0.048180924287118974,
+      "precision": 0.2653061224489796,
+      "recall": 0.06701030927835051,
+      "threshold": 0.3,
+      "threshold_source": "sweep",
+      "true_negatives": 1574,
+      "true_positives": 26
+    },
+    {
+      "f1": 0.10699588477366255,
+      "false_negatives": 362,
+      "false_positives": 72,
+      "flag_rate": 0.048180924287118974,
+      "precision": 0.2653061224489796,
+      "recall": 0.06701030927835051,
+      "threshold": 0.5,
+      "threshold_source": "sweep",
+      "true_negatives": 1574,
+      "true_positives": 26
+    }
+  ],
+  "train_duration_seconds": 0.021484999975655228,
+  "train_pr_auc": 0.21384095607477355,
+  "train_summary": {
+    "first_day": 1,
+    "first_ordered_at": "2025-09-01T00:57:24Z",
+    "last_day": 126,
+    "last_ordered_at": "2026-01-04T23:22:48Z",
+    "n_customers": 8774,
+    "n_positives": 3871,
+    "n_rows": 23058,
+    "name": "train",
+    "positive_rate": 0.16788099574984822
+  },
+  "trained_at": "2026-08-28T18:04:55.554496Z"
+}

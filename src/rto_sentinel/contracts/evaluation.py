@@ -11,15 +11,45 @@ Likewise :class:`PointEstimate` always carries an interval. A point estimate on
 
 from __future__ import annotations
 
+import math
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, model_validator
 
 from rto_sentinel.contracts.enums import DatasetSplit
 
+#: The components of a :class:`PointEstimate` that may legitimately be undefined.
+_UNDEFINABLE = frozenset({"value", "ci_low", "ci_high"})
+
 
 class PointEstimate(BaseModel):
-    """A statistic with its bootstrap interval attached, always."""
+    """A statistic with its bootstrap interval attached, always.
+
+    UNDEFINED IS A VALID STATE
+    --------------------------
+    Some metrics genuinely do not exist for some predictors. ROC-AUC has no
+    meaning for a constant predictor - there is no ranking to score - and rung 0
+    of the ladder is exactly that. Such a metric is NaN throughout, and this
+    model accepts it.
+
+    That is not the same as a bad score. Reporting 0.5 would claim "measured, and
+    no better than chance"; reporting 0.0 would claim "measured, and terrible".
+    The truth is "not defined for this predictor", and the comparison table shows
+    a dash rather than a number.
+
+    A partially-NaN estimate is still refused: a value with no interval, or an
+    interval around no value, is a bug rather than a statement.
+
+    NaN IN MEMORY, null ON DISK
+    ---------------------------
+    JSON has no NaN. Python's ``json`` module will happily emit a bare ``NaN``
+    token, but that is a non-standard extension: strict parsers reject it, and
+    pydantic reads it back as ``None`` and then refuses to build a float from it,
+    so an artefact written that way does not round-trip. The serialiser below
+    therefore writes ``null`` for an undefined component and the validator maps
+    ``null`` back to NaN on the way in. The meaning is unchanged - "this metric
+    does not exist for this predictor" - and the file stays valid JSON.
+    """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -29,12 +59,43 @@ class PointEstimate(BaseModel):
     confidence: float = Field(default=0.95, gt=0.0, lt=1.0)
     n_bootstrap: int = Field(default=0, ge=0)
 
+    @property
+    def is_defined(self) -> bool:
+        return math.isfinite(self.value)
+
     @model_validator(mode="after")
     def _interval_contains_value(self) -> PointEstimate:
+        parts = (self.value, self.ci_low, self.ci_high)
+        undefined = [not math.isfinite(part) for part in parts]
+
+        if all(undefined):
+            return self  # the metric does not exist for this predictor
+        if any(undefined):
+            msg = (
+                f"partially undefined estimate: value={self.value}, "
+                f"interval=[{self.ci_low}, {self.ci_high}]. A metric is either "
+                "defined with an interval or undefined throughout."
+            )
+            raise ValueError(msg)
         if not (self.ci_low <= self.value <= self.ci_high):
             msg = f"value {self.value} lies outside its interval [{self.ci_low}, {self.ci_high}]"
             raise ValueError(msg)
         return self
+
+    @model_validator(mode="before")
+    @classmethod
+    def _null_means_undefined(cls, data: object) -> object:
+        """Read ``null`` back as NaN, so a written artefact reloads to itself."""
+        if isinstance(data, dict):
+            return {
+                key: (math.nan if key in _UNDEFINABLE and value is None else value)
+                for key, value in data.items()
+            }
+        return data
+
+    @field_serializer("value", "ci_low", "ci_high")
+    def _undefined_as_null(self, value: float) -> float | None:
+        return value if math.isfinite(value) else None
 
 
 class RankingMetrics(BaseModel):
@@ -58,7 +119,9 @@ class CalibrationMetrics(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    expected_calibration_error: float = Field(ge=0.0)
+    expected_calibration_error: float = Field(
+        description="Mean absolute gap between predicted probability and observed frequency"
+    )
     brier_score: float = Field(ge=0.0)
     n_bins: int = Field(gt=1)
     reliability_bins: tuple[tuple[float, float, int], ...] = ()

@@ -1,0 +1,225 @@
+{
+  "calibration": {
+    "brier_score": 0.12560813647047783,
+    "expected_calibration_error": 0.024386575133088357,
+    "n_bins": 10,
+    "reliability_bins": [
+      [
+        0.02466287423191654,
+        0.0295159386068477,
+        847
+      ],
+      [
+        0.153680635798179,
+        0.1893939393939394,
+        396
+      ],
+      [
+        0.24385543543918223,
+        0.27445652173913043,
+        368
+      ],
+      [
+        0.34442310210922533,
+        0.37037037037037035,
+        216
+      ],
+      [
+        0.4510568202861101,
+        0.41414141414141414,
+        99
+      ],
+      [
+        0.5429542207944984,
+        0.45901639344262296,
+        61
+      ],
+      [
+        0.6456116151239429,
+        0.7741935483870968,
+        31
+      ],
+      [
+        0.7304634234730474,
+        0.9,
+        10
+      ],
+      [
+        0.8378719992015081,
+        0.8333333333333334,
+        6
+      ]
+    ]
+  },
+  "config_fingerprint": "f3943b6937cf0b36164e1fec043e25fc8c4eab1bc684887d778f14a268ebf251",
+  "data_provenance": "Synthetic benchmark data. Labels are simulated outcomes of the documented process in docs/simulator.md, not real-world ground truth. Absolute metric values are not a claim about production performance.",
+  "dataset_run_id": "7b5ae86219ac7cafe45e7d51",
+  "economics": {
+    "baseline_net_inr_per_1000_orders": -41966.56833824976,
+    "false_negatives": 249,
+    "false_positives": 158,
+    "flag_rate": 0.14601769911504425,
+    "gross_saving_inr": 18348.0,
+    "net_inr_saved_per_1000_orders": {
+      "ci_high": 5306.895280235987,
+      "ci_low": 1866.7957227138643,
+      "confidence": 0.95,
+      "n_bootstrap": 500,
+      "value": 3544.2477876106195
+    },
+    "residual_false_negative_loss_inr": 54780.0,
+    "threshold": 0.34814814814814815,
+    "total_false_positive_cost_inr": 11139.0,
+    "true_negatives": 1488,
+    "true_positives": 139
+  },
+  "evaluated_split": "validation",
+  "evaluation_summary": {
+    "first_day": 127,
+    "first_ordered_at": "2026-01-05T00:34:58Z",
+    "last_day": 147,
+    "last_ordered_at": "2026-01-25T23:42:01Z",
+    "n_customers": 1529,
+    "n_positives": 388,
+    "n_rows": 2034,
+    "name": "validation",
+    "positive_rate": 0.19075712881022616
+  },
+  "experiment_id": "4d7c1db817ff4c9c2341",
+  "families_used": [
+    "customer_history",
+    "temporal",
+    "order_shape",
+    "address_quality",
+    "session_intent",
+    "geography_route"
+  ],
+  "feature_fingerprint": "798aef57ad3cefe94cfeeb9555287fefda16e0c502f236f7e226590923531dfb",
+  "feature_version": "1.0.0",
+  "generator_version": "1.0.0",
+  "hyperparameters": {
+    "C": 1.0,
+    "class_weight": null,
+    "max_iter": 2000,
+    "monotonic_features": [
+      "prior_rto_rate",
+      "discount_depth"
+    ],
+    "penalty": "l2",
+    "random_state": 7
+  },
+  "is_calibrated": false,
+  "model_name": "logistic_regression",
+  "model_version": "18a8426b6df3",
+  "n_features": 54,
+  "notes": "Interpretable, fast, calibrated by construction. Surprisingly hard to beat and a genuine shipping candidate.",
+  "ranking": {
+    "pr_auc": {
+      "ci_high": 0.535154934437848,
+      "ci_low": 0.43863274220351084,
+      "confidence": 0.95,
+      "n_bootstrap": 500,
+      "value": 0.483066371734196
+    },
+    "precision_at_k": {
+      "0.01": 0.9,
+      "0.05": 0.6470588235294118,
+      "0.10": 0.5172413793103449
+    },
+    "recall_at_precision_80": 0.0979381443298969,
+    "recall_at_precision_90": 0.06958762886597938,
+    "roc_auc": {
+      "ci_high": 0.8218104427979092,
+      "ci_low": 0.7779585276896976,
+      "confidence": 0.95,
+      "n_bootstrap": 500,
+      "value": 0.799102165825306
+    }
+  },
+  "recorded_at": "2026-08-28T18:05:01.081304Z",
+  "rung_id": 3,
+  "rung_kind": "model",
+  "seed": 7,
+  "split_pool_shares": {
+    "test": 0.18,
+    "train": 0.55,
+    "validation": 0.27
+  },
+  "split_strategy": "temporal_grouped",
+  "threshold_metrics": [
+    {
+      "f1": 0.40583941605839413,
+      "false_negatives": 249,
+      "false_positives": 158,
+      "flag_rate": 0.14601769911504425,
+      "precision": 0.468013468013468,
+      "recall": 0.3582474226804124,
+      "threshold": 0.34814814814814815,
+      "threshold_source": "cost-derived",
+      "true_negatives": 1488,
+      "true_positives": 139
+    },
+    {
+      "f1": 0.4609523809523809,
+      "false_negatives": 25,
+      "false_positives": 824,
+      "flag_rate": 0.5835791543756146,
+      "precision": 0.3058129738837405,
+      "recall": 0.9355670103092784,
+      "threshold": 0.1,
+      "threshold_source": "sweep",
+      "true_negatives": 822,
+      "true_positives": 363
+    },
+    {
+      "f1": 0.48854961832061067,
+      "false_negatives": 100,
+      "false_positives": 503,
+      "flag_rate": 0.3888888888888889,
+      "precision": 0.3640960809102402,
+      "recall": 0.7422680412371134,
+      "threshold": 0.2,
+      "threshold_source": "sweep",
+      "true_negatives": 1143,
+      "true_positives": 288
+    },
+    {
+      "f1": 0.46115906288532676,
+      "false_negatives": 201,
+      "false_positives": 236,
+      "flag_rate": 0.2079646017699115,
+      "precision": 0.44208037825059104,
+      "recall": 0.48195876288659795,
+      "threshold": 0.3,
+      "threshold_source": "sweep",
+      "true_negatives": 1410,
+      "true_positives": 187
+    },
+    {
+      "f1": 0.2661290322580645,
+      "false_negatives": 322,
+      "false_positives": 42,
+      "flag_rate": 0.05309734513274336,
+      "precision": 0.6111111111111112,
+      "recall": 0.17010309278350516,
+      "threshold": 0.5,
+      "threshold_source": "sweep",
+      "true_negatives": 1604,
+      "true_positives": 66
+    }
+  ],
+  "train_duration_seconds": 1.2578412999864668,
+  "train_pr_auc": 0.43974970888320036,
+  "train_summary": {
+    "first_day": 1,
+    "first_ordered_at": "2025-09-01T00:57:24Z",
+    "last_day": 126,
+    "last_ordered_at": "2026-01-04T23:22:48Z",
+    "n_customers": 8774,
+    "n_positives": 3871,
+    "n_rows": 23058,
+    "name": "train",
+    "positive_rate": 0.16788099574984822
+  },
+  "trained_at": "2026-08-28T18:05:01.070985Z"
+}

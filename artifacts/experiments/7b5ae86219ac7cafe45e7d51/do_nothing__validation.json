@@ -1,0 +1,177 @@
+{
+  "calibration": {
+    "brier_score": 0.15489216408210105,
+    "expected_calibration_error": 0.022876133060378,
+    "n_bins": 10,
+    "reliability_bins": [
+      [
+        0.16788099574984816,
+        0.19075712881022616,
+        2034
+      ]
+    ]
+  },
+  "config_fingerprint": "f3943b6937cf0b36164e1fec043e25fc8c4eab1bc684887d778f14a268ebf251",
+  "data_provenance": "Synthetic benchmark data. Labels are simulated outcomes of the documented process in docs/simulator.md, not real-world ground truth. Absolute metric values are not a claim about production performance.",
+  "dataset_run_id": "7b5ae86219ac7cafe45e7d51",
+  "economics": {
+    "baseline_net_inr_per_1000_orders": -41966.56833824976,
+    "false_negatives": 388,
+    "false_positives": 0,
+    "flag_rate": 0.0,
+    "gross_saving_inr": 0.0,
+    "net_inr_saved_per_1000_orders": {
+      "ci_high": 0.0,
+      "ci_low": 0.0,
+      "confidence": 0.95,
+      "n_bootstrap": 500,
+      "value": 0.0
+    },
+    "residual_false_negative_loss_inr": 85360.0,
+    "threshold": 0.34814814814814815,
+    "total_false_positive_cost_inr": 0.0,
+    "true_negatives": 1646,
+    "true_positives": 0
+  },
+  "evaluated_split": "validation",
+  "evaluation_summary": {
+    "first_day": 127,
+    "first_ordered_at": "2026-01-05T00:34:58Z",
+    "last_day": 147,
+    "last_ordered_at": "2026-01-25T23:42:01Z",
+    "n_customers": 1529,
+    "n_positives": 388,
+    "n_rows": 2034,
+    "name": "validation",
+    "positive_rate": 0.19075712881022616
+  },
+  "experiment_id": "a3beba08957d74cdbd58",
+  "families_used": [
+    "customer_history",
+    "temporal",
+    "order_shape",
+    "address_quality",
+    "session_intent",
+    "geography_route"
+  ],
+  "feature_fingerprint": "798aef57ad3cefe94cfeeb9555287fefda16e0c502f236f7e226590923531dfb",
+  "feature_version": "1.0.0",
+  "generator_version": "1.0.0",
+  "hyperparameters": {
+    "random_state": 7
+  },
+  "is_calibrated": false,
+  "model_name": "do_nothing",
+  "model_version": "b2880c0d36ce",
+  "n_features": 54,
+  "notes": "Ship everything, flag nothing. Defines the loss the merchant currently absorbs; every later number is measured against it.",
+  "ranking": {
+    "pr_auc": {
+      "ci_high": 0.20648967551622419,
+      "ci_low": 0.17256637168141592,
+      "confidence": 0.95,
+      "n_bootstrap": 500,
+      "value": 0.19075712881022616
+    },
+    "precision_at_k": {
+      "0.01": 0.5,
+      "0.05": 0.23529411764705882,
+      "0.10": 0.23645320197044334
+    },
+    "recall_at_precision_80": null,
+    "recall_at_precision_90": null,
+    "roc_auc": {
+      "ci_high": null,
+      "ci_low": null,
+      "confidence": 0.95,
+      "n_bootstrap": 0,
+      "value": null
+    }
+  },
+  "recorded_at": "2026-08-28T18:04:48.029106Z",
+  "rung_id": 0,
+  "rung_kind": "baseline",
+  "seed": 7,
+  "split_pool_shares": {
+    "test": 0.18,
+    "train": 0.55,
+    "validation": 0.27
+  },
+  "split_strategy": "temporal_grouped",
+  "threshold_metrics": [
+    {
+      "f1": null,
+      "false_negatives": 388,
+      "false_positives": 0,
+      "flag_rate": 0.0,
+      "precision": null,
+      "recall": 0.0,
+      "threshold": 0.34814814814814815,
+      "threshold_source": "cost-derived",
+      "true_negatives": 1646,
+      "true_positives": 0
+    },
+    {
+      "f1": 0.32039636663914123,
+      "false_negatives": 0,
+      "false_positives": 1646,
+      "flag_rate": 1.0,
+      "precision": 0.19075712881022616,
+      "recall": 1.0,
+      "threshold": 0.1,
+      "threshold_source": "sweep",
+      "true_negatives": 0,
+      "true_positives": 388
+    },
+    {
+      "f1": null,
+      "false_negatives": 388,
+      "false_positives": 0,
+      "flag_rate": 0.0,
+      "precision": null,
+      "recall": 0.0,
+      "threshold": 0.2,
+      "threshold_source": "sweep",
+      "true_negatives": 1646,
+      "true_positives": 0
+    },
+    {
+      "f1": null,
+      "false_negatives": 388,
+      "false_positives": 0,
+      "flag_rate": 0.0,
+      "precision": null,
+      "recall": 0.0,
+      "threshold": 0.3,
+      "threshold_source": "sweep",
+      "true_negatives": 1646,
+      "true_positives": 0
+    },
+    {
+      "f1": null,
+      "false_negatives": 388,
+      "false_positives": 0,
+      "flag_rate": 0.0,
+      "precision": null,
+      "recall": 0.0,
+      "threshold": 0.5,
+      "threshold_source": "sweep",
+      "true_negatives": 1646,
+      "true_positives": 0
+    }
+  ],
+  "train_duration_seconds": 0.000546799972653389,
+  "train_pr_auc": 0.16788099574984822,
+  "train_summary": {
+    "first_day": 1,
+    "first_ordered_at": "2025-09-01T00:57:24Z",
+    "last_day": 126,
+    "last_ordered_at": "2026-01-04T23:22:48Z",
+    "n_customers": 8774,
+    "n_positives": 3871,
+    "n_rows": 23058,
+    "name": "train",
+    "positive_rate": 0.16788099574984822
+  },
+  "trained_at": "2026-08-28T18:04:48.002342Z"
+}

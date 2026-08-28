@@ -1,0 +1,225 @@
+{
+  "calibration": {
+    "brier_score": 0.1323795843066755,
+    "expected_calibration_error": 0.055800684058798004,
+    "n_bins": 10,
+    "reliability_bins": [
+      [
+        0.02673860552006268,
+        0.05422794117647059,
+        1088
+      ],
+      [
+        0.1438860415817423,
+        0.26704545454545453,
+        352
+      ],
+      [
+        0.24795745218569373,
+        0.3217391304347826,
+        230
+      ],
+      [
+        0.3464313929903751,
+        0.38926174496644295,
+        149
+      ],
+      [
+        0.44459195548288255,
+        0.41304347826086957,
+        92
+      ],
+      [
+        0.5468962492181534,
+        0.4375,
+        48
+      ],
+      [
+        0.6396993183756003,
+        0.5238095238095238,
+        42
+      ],
+      [
+        0.7452927353780273,
+        0.5714285714285714,
+        21
+      ],
+      [
+        0.8512144745718104,
+        0.8333333333333334,
+        12
+      ]
+    ]
+  },
+  "config_fingerprint": "f3943b6937cf0b36164e1fec043e25fc8c4eab1bc684887d778f14a268ebf251",
+  "data_provenance": "Synthetic benchmark data. Labels are simulated outcomes of the documented process in docs/simulator.md, not real-world ground truth. Absolute metric values are not a claim about production performance.",
+  "dataset_run_id": "7b5ae86219ac7cafe45e7d51",
+  "economics": {
+    "baseline_net_inr_per_1000_orders": -41966.56833824976,
+    "false_negatives": 256,
+    "false_positives": 152,
+    "flag_rate": 0.13962635201573254,
+    "gross_saving_inr": 17424.0,
+    "net_inr_saved_per_1000_orders": {
+      "ci_high": 5024.944690265486,
+      "ci_low": 1615.3945427728615,
+      "confidence": 0.95,
+      "n_bootstrap": 500,
+      "value": 3297.935103244838
+    },
+    "residual_false_negative_loss_inr": 56320.0,
+    "threshold": 0.34814814814814815,
+    "total_false_positive_cost_inr": 10716.0,
+    "true_negatives": 1494,
+    "true_positives": 132
+  },
+  "evaluated_split": "validation",
+  "evaluation_summary": {
+    "first_day": 127,
+    "first_ordered_at": "2026-01-05T00:34:58Z",
+    "last_day": 147,
+    "last_ordered_at": "2026-01-25T23:42:01Z",
+    "n_customers": 1529,
+    "n_positives": 388,
+    "n_rows": 2034,
+    "name": "validation",
+    "positive_rate": 0.19075712881022616
+  },
+  "experiment_id": "7b5d46d500aab95247c5",
+  "families_used": [
+    "customer_history",
+    "temporal",
+    "order_shape",
+    "address_quality",
+    "session_intent",
+    "geography_route"
+  ],
+  "feature_fingerprint": "798aef57ad3cefe94cfeeb9555287fefda16e0c502f236f7e226590923531dfb",
+  "feature_version": "1.0.0",
+  "generator_version": "1.0.0",
+  "hyperparameters": {
+    "colsample_bytree": 0.8,
+    "learning_rate": 0.05,
+    "min_child_samples": 40,
+    "n_estimators": 600,
+    "num_leaves": 31,
+    "objective": "binary",
+    "random_state": 7,
+    "scale_pos_weight": 1.0,
+    "subsample": 0.9
+  },
+  "is_calibrated": false,
+  "model_name": "lightgbm",
+  "model_version": "a969229da41d",
+  "n_features": 54,
+  "notes": "The expected winner. Handles interactions and missingness natively; isotonic regression on the validation fold fixes the score distortion raw boosting produces.",
+  "ranking": {
+    "pr_auc": {
+      "ci_high": 0.5009271253013167,
+      "ci_low": 0.397110452044688,
+      "confidence": 0.95,
+      "n_bootstrap": 500,
+      "value": 0.4429588863302478
+    },
+    "precision_at_k": {
+      "0.01": 0.8,
+      "0.05": 0.5784313725490197,
+      "0.10": 0.4827586206896552
+    },
+    "recall_at_precision_80": 0.04381443298969072,
+    "recall_at_precision_90": null,
+    "roc_auc": {
+      "ci_high": 0.8148841944076485,
+      "ci_low": 0.7674217240259296,
+      "confidence": 0.95,
+      "n_bootstrap": 500,
+      "value": 0.7903273790883242
+    }
+  },
+  "recorded_at": "2026-08-28T18:05:13.311317Z",
+  "rung_id": 4,
+  "rung_kind": "model",
+  "seed": 7,
+  "split_pool_shares": {
+    "test": 0.18,
+    "train": 0.55,
+    "validation": 0.27
+  },
+  "split_strategy": "temporal_grouped",
+  "threshold_metrics": [
+    {
+      "f1": 0.3928571428571429,
+      "false_negatives": 256,
+      "false_positives": 152,
+      "flag_rate": 0.13962635201573254,
+      "precision": 0.4647887323943662,
+      "recall": 0.3402061855670103,
+      "threshold": 0.34814814814814815,
+      "threshold_source": "cost-derived",
+      "true_negatives": 1494,
+      "true_positives": 132
+    },
+    {
+      "f1": 0.49325337331334335,
+      "false_negatives": 59,
+      "false_positives": 617,
+      "flag_rate": 0.46509341199606685,
+      "precision": 0.3477801268498943,
+      "recall": 0.8479381443298969,
+      "threshold": 0.1,
+      "threshold_source": "sweep",
+      "true_negatives": 1029,
+      "true_positives": 329
+    },
+    {
+      "f1": 0.47861507128309566,
+      "false_negatives": 153,
+      "false_positives": 359,
+      "flag_rate": 0.2920353982300885,
+      "precision": 0.3956228956228956,
+      "recall": 0.6056701030927835,
+      "threshold": 0.2,
+      "threshold_source": "sweep",
+      "true_negatives": 1287,
+      "true_positives": 235
+    },
+    {
+      "f1": 0.42819148936170215,
+      "false_negatives": 227,
+      "false_positives": 203,
+      "flag_rate": 0.17895771878072764,
+      "precision": 0.4423076923076923,
+      "recall": 0.41494845360824745,
+      "threshold": 0.3,
+      "threshold_source": "sweep",
+      "true_negatives": 1443,
+      "true_positives": 161
+    },
+    {
+      "f1": 0.25440313111545987,
+      "false_negatives": 323,
+      "false_positives": 58,
+      "flag_rate": 0.06047197640117994,
+      "precision": 0.5284552845528455,
+      "recall": 0.16752577319587628,
+      "threshold": 0.5,
+      "threshold_source": "sweep",
+      "true_negatives": 1588,
+      "true_positives": 65
+    }
+  ],
+  "train_duration_seconds": 5.391954899998382,
+  "train_pr_auc": 0.9618811695804551,
+  "train_summary": {
+    "first_day": 1,
+    "first_ordered_at": "2025-09-01T00:57:24Z",
+    "last_day": 126,
+    "last_ordered_at": "2026-01-04T23:22:48Z",
+    "n_customers": 8774,
+    "n_positives": 3871,
+    "n_rows": 23058,
+    "name": "train",
+    "positive_rate": 0.16788099574984822
+  },
+  "trained_at": "2026-08-28T18:05:13.302577Z"
+}

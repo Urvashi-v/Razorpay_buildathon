@@ -25,11 +25,21 @@ import pandas as pd
 import pytest
 
 from rto_sentinel.configuration import (
+    load_cost_model_config,
+    load_evaluation_config,
     load_features_config,
     load_generator_config,
+    load_ladder_config,
     load_splits_config,
 )
-from rto_sentinel.configuration.schemas import FeaturesConfig, GeneratorConfig, SplitsConfig
+from rto_sentinel.configuration.schemas import (
+    CostModelConfig,
+    EvaluationConfig,
+    FeaturesConfig,
+    GeneratorConfig,
+    LadderConfig,
+    SplitsConfig,
+)
 from rto_sentinel.data import schema as cols
 from rto_sentinel.data.generator import ConfiguredOrderGenerator, GenerationResult, GeneratorParams
 from rto_sentinel.data.splits import assign_splits
@@ -157,3 +167,81 @@ def modeling_dataset(
         splits_config=splits_config,
         split_labels=split_labels,
     )
+
+
+# ---------------------------------------------------------------------------
+# ladder fixtures
+# ---------------------------------------------------------------------------
+
+#: Larger than SMALL_DATASET. The ladder needs enough rows for a tree model to
+#: fit at all and for the pincode blocklist to find any pincode with support;
+#: at 2,000 orders the blocklist comes out empty and the tests would be asserting
+#: nothing. Still small enough to keep the suite under a minute.
+LADDER_DATASET = GeneratorParams(
+    seed=4242,
+    generator_version="1.0.0",
+    n_customers=5000,
+    n_orders=15000,
+    start_date=datetime(2025, 9, 1, tzinfo=UTC),
+    end_date=datetime(2026, 2, 27, tzinfo=UTC),
+)
+
+
+@pytest.fixture(scope="session")
+def ladder_config() -> LadderConfig:
+    return load_ladder_config(Settings(RTO_CONFIG_DIR=str(REPO_ROOT / "config")))
+
+
+@pytest.fixture(scope="session")
+def cost_config() -> CostModelConfig:
+    return load_cost_model_config(Settings(RTO_CONFIG_DIR=str(REPO_ROOT / "config")))
+
+
+@pytest.fixture(scope="session")
+def evaluation_config() -> EvaluationConfig:
+    """The real evaluation config, so the reporting prohibitions under test are
+    the ones the project actually ships."""
+    return load_evaluation_config(Settings(RTO_CONFIG_DIR=str(REPO_ROOT / "config")))
+
+
+@pytest.fixture(scope="session")
+def ladder_dataset(
+    generator_config: GeneratorConfig,
+    features_config: FeaturesConfig,
+    splits_config: SplitsConfig,
+) -> ModelingDataset:
+    """A modelling dataset big enough to train the ladder on, built once."""
+    result = ConfiguredOrderGenerator().generate(generator_config, LADDER_DATASET)
+    labels = assign_splits(result.orders, splits_config).labels
+    return build_modeling_dataset(
+        result,
+        features_config=features_config,
+        generator_config=generator_config,
+        splits_config=splits_config,
+        split_labels=labels,
+    )
+
+
+@pytest.fixture
+def model_card_factory(ladder_dataset: ModelingDataset):
+    """Build a minimal, valid model card for artefact round-trip tests."""
+    from rto_sentinel.contracts.risk import ModelCard
+
+    def build(name: str, model) -> ModelCard:  # type: ignore[no-untyped-def]
+        metadata = ladder_dataset.metadata
+        return ModelCard(
+            model_name=name,
+            model_version="testv1",
+            rung_id=model.rung_id,
+            trained_at=datetime(2026, 1, 1, tzinfo=UTC),
+            training_rows=ladder_dataset.train.n_rows,
+            feature_names=tuple(ladder_dataset.train.x.columns),
+            enabled_families=metadata.families_used,
+            random_seed=11,
+            config_fingerprint=metadata.config_fingerprint,
+            feature_fingerprint=metadata.feature_fingerprint,
+            dataset_run_id=metadata.dataset_run_id,
+            generator_version=metadata.generator_version,
+        )
+
+    return build

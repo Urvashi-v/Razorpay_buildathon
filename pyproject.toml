@@ -31,6 +31,10 @@ dependencies = [
   "scikit-learn>=1.4,<2",
   "lightgbm>=4.3,<5",
   "shap>=0.45,<1",
+  # Evaluation plots: PR curves, reliability diagrams, threshold sweeps. Written
+  # to artifacts/reports/ as PNGs rather than shown, so the harness stays usable
+  # without a display.
+  "matplotlib>=3.8,<4",
   "scipy>=1.12,<2",
   # Parquet is the dataset artefact format. A CSV round-trip loses exactly the
   # two dtypes that matter here: timezone-aware timestamps, and the difference
@@ -139,7 +143,7 @@ plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
 # Third-party scientific stack ships incomplete or absent type information.
-module = ["lightgbm.*", "shap.*", "sklearn.*", "scipy.*", "structlog.*"]
+module = ["joblib.*", "lightgbm.*", "shap.*", "sklearn.*", "scipy.*", "structlog.*"]
 ignore_missing_imports = true
 
 [tool.coverage.run]
