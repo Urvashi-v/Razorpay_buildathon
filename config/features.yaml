@@ -38,6 +38,27 @@ families:
                 that new equals risky; the new-customer cohort is reported as a
                 separate slice in every evaluation."
 
+  temporal:
+    enabled: true
+    as_of: true                    # MANDATORY: bounded windows, as-of order time
+    signals:
+      - orders_last_7d
+      - orders_last_30d
+      - orders_last_90d
+      - rto_count_last_30d
+      - rto_count_last_90d
+      - rto_rate_last_30d
+      - rto_rate_last_90d
+      - days_since_last_rto
+      - order_burst
+    risk_note: "Bounded lookback windows. Order-frequency windows run on the
+                PLACED clock and are knowable instantly; return windows run on
+                the RESOLVED clock, so an order that has not come back yet
+                contributes nothing. A recency-weighted rate is fairer than an
+                all-time one - a bad month two years ago should decay - but the
+                burst feature carries real fairness risk, because a seasonal
+                shopper and an impulsive one look identical over seven days."
+
   order_shape:
     enabled: true
     signals:
@@ -82,6 +103,18 @@ families:
 # REFUSED FEATURES - SPEC section 04, "What I am refusing to use".
 # tests/unit/test_refused_features.py asserts that no column matching these
 # patterns can reach a model, so the refusal is mechanical rather than a promise.
+#
+# MATCHING IS BY WHOLE TOKEN, not substring. A feature name is split on
+# underscores and each pattern is compared against those tokens (a multi-word
+# pattern matches a consecutive run of them). Substring matching was tried first
+# and was unusable: the pattern `age` matched `cust_account_age_days` and
+# `session_product_page_seconds`, neither of which has anything to do with a
+# customer's age. A check that cries wolf gets switched off, which is worse than
+# no check at all.
+#
+# Genuine collisions that survive token matching go in `allowed_exceptions`
+# below, each with a written justification. That list is the audit trail: it is
+# short, it is reviewed, and a test asserts every entry carries a reason.
 # -----------------------------------------------------------------------------
 refused:
   - id: name_derived
@@ -108,12 +141,21 @@ refused:
   - id: protected_attributes
     patterns:
       - gender
+      - sex
       - age
+      - customer_age
+      - age_band
+      - age_group
       - date_of_birth
+      - dob
+      - birth_year
       - religion
       - caste
       - language_inferred
-    reason: "No lift worth the exposure."
+      - ethnicity
+    reason: "No lift worth the exposure. Note that `age` here means the
+             customer's age, a protected attribute - not account tenure, which
+             is a legitimate commercial signal and is allowed by exception below."
 
   - id: cross_merchant
     patterns:
@@ -122,3 +164,17 @@ refused:
       - shared_identity_ring
     reason: "Out of scope, and a consent question this project cannot resolve
              responsibly in this window."
+
+# -----------------------------------------------------------------------------
+# ALLOWED EXCEPTIONS
+#
+# Feature names that contain a refused token but are demonstrably not the refused
+# thing. Each needs a justification, and the list is deliberately kept tiny - if
+# it grows, the patterns are wrong and should be fixed rather than exempted.
+# -----------------------------------------------------------------------------
+allowed_exceptions:
+  - feature: cust_account_age_days
+    contains_token: age
+    reason: "Account tenure - days since the customer registered - not the
+             customer's age. A legitimate commercial signal with no protected
+             content: it is a fact about the relationship, not about the person."

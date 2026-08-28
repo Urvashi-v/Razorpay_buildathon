@@ -9,6 +9,9 @@ a shell without a notebook anywhere in the loop::
     rto-sentinel validate --run-id ...        # re-validate an artefact
     rto-sentinel seed-db --seed 42 ...        # migrate, generate, validate, load
     rto-sentinel db stats --run-id ...        # query the loaded data back
+    rto-sentinel features list                # every feature and its definition
+    rto-sentinel features docs                # regenerate docs/features.md
+    rto-sentinel build-dataset --seed 42 ...  # generate + split + build features
     rto-sentinel train --rung 4               # train one ladder rung   (Phase 3)
     rto-sentinel evaluate                     # score a model           (Phase 4)
     rto-sentinel serve                        # run the API
@@ -37,7 +40,7 @@ from rto_sentinel.data.artifacts import latest_dataset_dir, read_dataset
 from rto_sentinel.data.generator import SUPPORTED_GENERATOR_VERSIONS, GeneratorParams
 from rto_sentinel.data.pipeline import build_dataset
 from rto_sentinel.data.validation import validate_delivery_events, validate_orders
-from rto_sentinel.settings import Settings, get_settings
+from rto_sentinel.settings import REPO_ROOT, Settings, get_settings
 
 # ---------------------------------------------------------------------------
 # config
@@ -291,6 +294,129 @@ def _cmd_seed_db(args: argparse.Namespace) -> int:
     return 0
 
 
+# ---------------------------------------------------------------------------
+# features
+# ---------------------------------------------------------------------------
+
+
+def _cmd_features_list(args: argparse.Namespace) -> int:
+    """Print every feature with its definition and timestamp provenance."""
+    from rto_sentinel.configuration import load_features_config
+    from rto_sentinel.features import FEATURE_VERSION, FeaturePipeline
+
+    settings = get_settings()
+    pipeline = FeaturePipeline(load_features_config(settings), load_generator_config(settings))
+    pipeline.check_declarations()
+    feature_set = pipeline.feature_set
+
+    print(f"feature version    : {FEATURE_VERSION}")
+    print(f"feature fingerprint: {feature_set.fingerprint()}")
+    print(f"features           : {len(feature_set)} across {len(feature_set.families)} families")
+    print()
+
+    for family in feature_set.families:
+        subset = feature_set.by_family(family)
+        print(f"=== {family}  ({len(subset)} features) ===")
+        for spec in subset:
+            lookback = str(spec.lookback) if spec.lookback else "-"
+            flag = "OK " if spec.is_available_at_prediction_time else "LEAK"
+            print(f"  [{flag}] {spec.name}")
+            print(f"         type={spec.dtype}  observed={spec.observation_point}")
+            print(f"         lookback={lookback}")
+            print(f"         sources={', '.join(spec.source_columns)}")
+            print(f"         {spec.description}")
+            if args.verbose:
+                print(f"         risk: {spec.risk_note}")
+        print()
+
+    unavailable = feature_set.unavailable_at_prediction_time()
+    if unavailable:
+        print(f"REFUSED: {[s.name for s in unavailable]} are not available at prediction time")
+        return 1
+    print("every feature is declared available at order time.")
+    return 0
+
+
+def _cmd_features_docs(_: argparse.Namespace) -> int:
+    """Regenerate docs/features.md from the feature declarations."""
+    from rto_sentinel.configuration import load_features_config
+    from rto_sentinel.features import FEATURE_VERSION, FeaturePipeline
+    from rto_sentinel.features.catalogue import render_markdown
+
+    settings = get_settings()
+    pipeline = FeaturePipeline(load_features_config(settings), load_generator_config(settings))
+    pipeline.check_declarations()
+    feature_set = pipeline.feature_set
+
+    target = REPO_ROOT / "docs" / "features.md"
+    target.write_text(
+        render_markdown(
+            feature_set,
+            feature_version=FEATURE_VERSION,
+            fingerprint=feature_set.fingerprint(),
+        ),
+        encoding="utf-8",
+    )
+    print(f"wrote {target} ({len(feature_set)} features)")
+    return 0
+
+
+def _cmd_build_dataset(args: argparse.Namespace) -> int:
+    """Generate, split, build features, and report the modelling dataset."""
+    from rto_sentinel.configuration import load_features_config
+    from rto_sentinel.data.splits import assign_splits
+    from rto_sentinel.features import build_modeling_dataset
+
+    settings = get_settings()
+    params = _resolve_params(args, settings)
+    generator_config = load_generator_config(settings)
+    splits_config = load_splits_config(settings)
+
+    print(
+        f"generating {params.n_orders:,} orders for {params.n_customers:,} customers "
+        f"over {params.days} days (seed {params.seed})"
+    )
+    pipeline_result = build_dataset(
+        generator_config=generator_config,
+        splits_config=splits_config,
+        params=params,
+        artifact_root=None if args.no_write else settings.artifact_path,
+        strict=not args.lenient,
+    )
+    if not pipeline_result.ok:
+        print("dataset validation FAILED; refusing to build features.", file=sys.stderr)
+        print(pipeline_result.render(), file=sys.stderr)
+        return 1
+
+    dataset = build_modeling_dataset(
+        pipeline_result.dataset,
+        features_config=load_features_config(settings),
+        generator_config=generator_config,
+        splits_config=splits_config,
+        split_labels=assign_splits(pipeline_result.dataset.orders, splits_config).labels,
+    )
+
+    print()
+    print(dataset.describe())
+    print()
+    print("label balance")
+    for name in ("train", "validation"):
+        view = getattr(dataset, name)
+        print(f"  {view.describe()}")
+    # The test split's label is NOT printed. Its shape appears above; its
+    # outcomes stay sealed until the single final evaluation.
+    print("  test        [SEALED - row counts and dates above, labels withheld]")
+
+    print()
+    print("feature null shares (highest 10)")
+    null_shares = dataset.features.isna().mean().sort_values(ascending=False).head(10)
+    for raw_name, share in null_shares.items():
+        name = str(raw_name)
+        expected = dataset.feature_set.get(name).expected_null_share
+        print(f"  {name:<38} {share:6.1%}   (declared ~{expected:.0%})")
+    return 0
+
+
 def _cmd_serve(args: argparse.Namespace) -> int:
     """Run the API with uvicorn."""
     import uvicorn
@@ -372,6 +498,20 @@ def build_parser() -> argparse.ArgumentParser:
     _add_generation_arguments(seed)
     seed.add_argument("--skip-migrations", action="store_true")
     seed.set_defaults(func=_cmd_seed_db)
+
+    features_parser = sub.add_parser("features", help="feature pipeline utilities")
+    features_sub = features_parser.add_subparsers(dest="features_command", required=True)
+    listing = features_sub.add_parser("list", help="print every feature and its definition")
+    listing.add_argument("--verbose", action="store_true", help="include risk notes")
+    listing.set_defaults(func=_cmd_features_list)
+    features_sub.add_parser("docs", help="regenerate docs/features.md").set_defaults(
+        func=_cmd_features_docs
+    )
+
+    build = sub.add_parser("build-dataset", help="generate, split and build the modelling dataset")
+    _add_generation_arguments(build)
+    build.add_argument("--no-write", action="store_true")
+    build.set_defaults(func=_cmd_build_dataset)
 
     serve = sub.add_parser("serve", help="run the API")
     serve.add_argument("--host", default=None)

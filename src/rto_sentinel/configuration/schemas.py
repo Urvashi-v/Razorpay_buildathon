@@ -311,14 +311,39 @@ class RefusedFeatureGroup(_Frozen):
     reason: str
 
 
+class AllowedException(_Frozen):
+    """A feature name that contains a refused token but is not the refused thing.
+
+    Each needs a written justification. The list is deliberately tiny - if it
+    grows, the refused patterns are wrong and should be fixed rather than
+    exempted one name at a time.
+    """
+
+    feature: str
+    contains_token: str
+    reason: str
+
+    @model_validator(mode="after")
+    def _reason_is_present(self) -> AllowedException:
+        if not self.reason.strip():
+            msg = f"allowed exception for {self.feature!r} has no justification"
+            raise ValueError(msg)
+        return self
+
+
 class FeaturesConfig(_Frozen):
     version: int
     families: dict[str, FeatureFamilyConfig]
     refused: list[RefusedFeatureGroup]
+    allowed_exceptions: list[AllowedException] = Field(default_factory=list)
 
     @property
     def refused_patterns(self) -> frozenset[str]:
         return frozenset(p.lower() for group in self.refused for p in group.patterns)
+
+    @property
+    def exempt_features(self) -> frozenset[str]:
+        return frozenset(item.feature.lower() for item in self.allowed_exceptions)
 
     @property
     def enabled_families(self) -> tuple[str, ...]:

@@ -21,11 +21,23 @@ from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pandas as pd
 import pytest
 
-from rto_sentinel.configuration import load_generator_config, load_splits_config
-from rto_sentinel.configuration.schemas import GeneratorConfig, SplitsConfig
+from rto_sentinel.configuration import (
+    load_features_config,
+    load_generator_config,
+    load_splits_config,
+)
+from rto_sentinel.configuration.schemas import FeaturesConfig, GeneratorConfig, SplitsConfig
+from rto_sentinel.data import schema as cols
 from rto_sentinel.data.generator import ConfiguredOrderGenerator, GenerationResult, GeneratorParams
+from rto_sentinel.data.splits import assign_splits
+from rto_sentinel.features import (
+    ModelingDataset,
+    attach_customer_dimension,
+    build_modeling_dataset,
+)
 from rto_sentinel.settings import REPO_ROOT, Settings, get_settings
 
 # Environment variables that must not leak in from the developer's own shell or a
@@ -104,3 +116,44 @@ def splits_config() -> SplitsConfig:
 def small_dataset(generator_config: GeneratorConfig) -> GenerationResult:
     """One small generated dataset, shared across the suite."""
     return ConfiguredOrderGenerator().generate(generator_config, SMALL_DATASET)
+
+
+@pytest.fixture(scope="session")
+def features_config() -> FeaturesConfig:
+    return load_features_config(Settings(RTO_CONFIG_DIR=str(REPO_ROOT / "config")))
+
+
+@pytest.fixture(scope="session")
+def split_labels(small_dataset: GenerationResult, splits_config: SplitsConfig) -> pd.Series:
+    """Split assignment for the shared dataset, computed once."""
+    return assign_splits(small_dataset.orders, splits_config).labels
+
+
+@pytest.fixture(scope="session")
+def feature_frame(small_dataset: GenerationResult, split_labels: pd.Series) -> pd.DataFrame:
+    """The raw order table with splits assigned and the customer dimension joined.
+
+    This is exactly what ``FeaturePipeline.build`` is handed, so the leakage tests
+    exercise the real input rather than a convenient reconstruction of it.
+    """
+    orders = small_dataset.orders.copy()
+    orders[cols.SPLIT] = split_labels
+    return attach_customer_dimension(orders, small_dataset.customers)
+
+
+@pytest.fixture(scope="session")
+def modeling_dataset(
+    small_dataset: GenerationResult,
+    features_config: FeaturesConfig,
+    generator_config: GeneratorConfig,
+    splits_config: SplitsConfig,
+    split_labels: pd.Series,
+) -> ModelingDataset:
+    """One built modelling dataset, shared across the suite."""
+    return build_modeling_dataset(
+        small_dataset,
+        features_config=features_config,
+        generator_config=generator_config,
+        splits_config=splits_config,
+        split_labels=split_labels,
+    )
