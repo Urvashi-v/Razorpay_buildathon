@@ -321,6 +321,19 @@ edited is not an audit trail.
 methods to call, so "the LLM must not modify a decision" is a fact about the type
 it holds.
 
+**Benchmark identifiers are unique per dataset run, not globally.** `order_id`,
+`customer_hash` and `address_fingerprint` name a row inside one run: two
+generator runs both number orders from `ORD-00000001` and both render some of the
+same addresses. They were originally declared globally unique, which made a
+database that could hold exactly one benchmark dataset — the second `seed-db`
+failed on a unique-constraint violation, despite `dataset_runs` and `delete_run`
+existing so that runs can coexist and be compared. Migration `4f1c2a7d8e30`
+replaces each global index with a composite unique constraint on
+`(dataset_run_id, identifier)` plus a **partial** unique index on the identifier
+alone `WHERE dataset_run_id IS NULL`, so serving-path rows — real orders, part of
+no benchmark — keep global uniqueness. The composite constraint alone would not
+give them that: SQL treats NULLs as distinct.
+
 ### 3.10 API (`api/`)
 
 Handlers marshal and delegate. `test_no_ml_logic_in_route_handlers` asserts no

@@ -314,3 +314,82 @@ def test_negative_order_values_are_rejected_by_the_database(session: Session, ti
     with pytest.raises(IntegrityError):
         session.commit()
     session.rollback()
+
+
+# ---------------------------------------------------------------------------
+# several dataset runs in one database
+# ---------------------------------------------------------------------------
+
+#: A second run. Same generator, different seed, so it renumbers its orders from
+#: ORD-00000001 again and re-renders many of the same addresses.
+SECOND = GeneratorParams(
+    seed=777,
+    generator_version="1.0.0",
+    n_customers=120,
+    n_orders=400,
+    start_date=datetime(2025, 9, 1, tzinfo=UTC),
+    end_date=datetime(2026, 2, 27, tzinfo=UTC),
+)
+
+
+@pytest.fixture(scope="module")
+def second_dataset(generator_config: GeneratorConfig, splits_config: SplitsConfig):
+    result = ConfiguredOrderGenerator().generate(generator_config, SECOND)
+    result.orders[cols.SPLIT] = assign_splits(result.orders, splits_config).labels
+    return result
+
+
+def test_two_dataset_runs_coexist(session: Session, tiny_dataset, second_dataset) -> None:
+    """The regression this file exists to prevent from recurring.
+
+    ``order_id``, ``customer_hash`` and ``address_fingerprint`` were originally
+    globally unique, which made the database able to hold exactly one benchmark
+    dataset: the second `seed-db` died on
+
+        duplicate key value violates unique constraint
+        "ix_addresses_address_fingerprint"
+
+    Both runs number their orders from ORD-00000001 and both render some of the
+    same address text, so the collision is guaranteed rather than incidental.
+    """
+    repository = DatasetRepository(session)
+    repository.load(tiny_dataset)
+    repository.load(second_dataset)
+    session.commit()
+
+    first_id = tiny_dataset.metadata.run_id
+    second_id = second_dataset.metadata.run_id
+    assert first_id != second_id
+
+    assert repository.table_counts(first_id)["orders"] == len(tiny_dataset.orders)
+    assert repository.table_counts(second_id)["orders"] == len(second_dataset.orders)
+
+    shared = set(tiny_dataset.orders[cols.ORDER_ID]) & set(second_dataset.orders[cols.ORDER_ID])
+    assert shared, "the runs must actually share order ids for this test to mean anything"
+
+    duplicated = (
+        session.execute(select(Order.order_id).where(Order.order_id == next(iter(shared))))
+        .scalars()
+        .all()
+    )
+    assert len(duplicated) == 2, "the same order id must exist once per run"
+
+
+def test_an_order_id_cannot_repeat_within_one_run(loaded) -> None:
+    """Scoping uniqueness to the run must not weaken it inside the run."""
+    session, run_id = loaded
+    existing = session.execute(
+        select(Order).where(Order.dataset_run_id == run_id).limit(1)
+    ).scalar_one()
+
+    # Copy every column except the surrogate key, so the only thing under test is
+    # the repeated `order_id` rather than an incidentally invalid row.
+    values = {
+        column.key: getattr(existing, column.key)
+        for column in Order.__mapper__.column_attrs
+        if column.key != "id"
+    }
+    session.add(Order(**values))
+    with pytest.raises(IntegrityError):
+        session.commit()
+    session.rollback()

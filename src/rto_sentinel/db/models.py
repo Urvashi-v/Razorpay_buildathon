@@ -80,6 +80,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -94,6 +95,42 @@ from rto_sentinel.contracts.enums import (
     RiskBand,
 )
 from rto_sentinel.db.base import Base, TimestampMixin
+
+
+def _run_scoped_identity(table: str, column: str) -> tuple[UniqueConstraint, Index]:
+    """Uniqueness for an identifier that belongs to one dataset run.
+
+    RUN-SCOPED IDENTITY
+    ===================
+    ``order_id``, ``customer_hash`` and ``address_fingerprint`` are identifiers
+    *inside a dataset run*, not across the database. Two runs of the generator
+    both number their orders from ``ORD-00000001``, and two runs will render the
+    same address text and therefore hash it to the same fingerprint. Declaring
+    these globally unique made a database that could hold exactly one benchmark
+    dataset - the second ``seed-db`` failed on a unique-constraint violation,
+    even though ``dataset_runs`` and ``delete_run`` exist precisely so that
+    several runs can coexist and be compared.
+
+    So uniqueness is scoped to the run. Rows with no run - the serving path, where
+    a real order is not part of any benchmark - keep **global** uniqueness through
+    a partial unique index, because a duplicate order id there is a genuine error.
+    A plain composite constraint would not catch it: SQL treats NULLs as distinct,
+    so every serving-path row would satisfy ``(NULL, 'ORD-1')`` uniqueness
+    independently.
+
+    No foreign key references these columns - every relationship in this schema
+    points at a surrogate integer primary key - so scoping them breaks nothing.
+    """
+    return (
+        UniqueConstraint("dataset_run_id", column, name=f"{table}_{column}_run_unique"),
+        Index(
+            f"ix_{table}_{column}_standalone",
+            column,
+            unique=True,
+            sqlite_where=text("dataset_run_id IS NULL"),
+            postgresql_where=text("dataset_run_id IS NULL"),
+        ),
+    )
 
 
 class DatasetRun(Base, TimestampMixin):
@@ -148,7 +185,8 @@ class Customer(Base, TimestampMixin):
     __tablename__ = "customers"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    customer_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
+    # Unique *within a dataset run*, not globally - see RUN-SCOPED IDENTITY below.
+    customer_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     signup_at: Mapped[datetime] = mapped_column(nullable=False, index=True)
     home_pincode: Mapped[str] = mapped_column(String(6), nullable=False, index=True)
     home_pincode_tier: Mapped[PincodeTier] = mapped_column(String(16), nullable=False)
@@ -159,6 +197,8 @@ class Customer(Base, TimestampMixin):
     )
 
     orders: Mapped[list[Order]] = relationship("Order", back_populates="customer")
+
+    __table_args__ = _run_scoped_identity("customers", "customer_hash")
 
 
 class Address(Base, TimestampMixin):
@@ -172,9 +212,8 @@ class Address(Base, TimestampMixin):
     __tablename__ = "addresses"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    address_fingerprint: Mapped[str] = mapped_column(
-        String(32), unique=True, nullable=False, index=True
-    )
+    # Unique *within a dataset run*, not globally - see RUN-SCOPED IDENTITY below.
+    address_fingerprint: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
 
     address_line: Mapped[str] = mapped_column(Text, nullable=False)
     address_city: Mapped[str] = mapped_column(String(128), nullable=False)
@@ -204,6 +243,7 @@ class Address(Base, TimestampMixin):
             "addr_gibberish_ratio >= 0 AND addr_gibberish_ratio <= 1",
             name="gibberish_ratio_in_range",
         ),
+        *_run_scoped_identity("addresses", "address_fingerprint"),
     )
 
 
@@ -220,7 +260,8 @@ class Order(Base, TimestampMixin):
     __tablename__ = "orders"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    order_id: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
+    # Unique *within a dataset run*, not globally - see RUN-SCOPED IDENTITY below.
+    order_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     merchant_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
 
     customer_pk: Mapped[int] = mapped_column(
@@ -304,6 +345,7 @@ class Order(Base, TimestampMixin):
         ),
         Index("ix_orders_merchant_ordered_at", "merchant_id", "ordered_at"),
         Index("ix_orders_customer_ordered_at", "customer_hash", "ordered_at"),
+        *_run_scoped_identity("orders", "order_id"),
     )
 
 
