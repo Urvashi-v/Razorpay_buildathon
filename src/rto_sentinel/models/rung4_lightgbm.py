@@ -62,7 +62,14 @@ DEFAULTS: dict[str, Any] = {
     "subsample": 0.9,
     "colsample_bytree": 0.8,
     "scale_pos_weight": 1.0,
+    # L2 penalty on leaf weights. Present because Phase 5 selects over model
+    # capacity, and a capacity search that cannot express regularisation is only
+    # searching half the axis it claims to.
+    "reg_lambda": 0.0,
 }
+
+#: Parameters the harness supplies that are not LightGBM capacity settings.
+_HARNESS_PARAMS = frozenset({"random_state"})
 
 
 class LightGbmModel(RiskModel):
@@ -77,6 +84,19 @@ class LightGbmModel(RiskModel):
         self.categorical_features_: tuple[str, ...] = ()
 
     def _hyperparameters(self) -> dict[str, Any]:
+        # Refuse rather than ignore. Silently dropping an unrecognised parameter
+        # would make every recorded hyperparameter set a claim about a model that
+        # was not the one fitted - and a search over `reg_lambda` that quietly did
+        # nothing would look like evidence that regularisation did not help.
+        unknown = set(self.params) - set(DEFAULTS) - _HARNESS_PARAMS
+        if unknown:
+            msg = (
+                f"unknown LightGBM parameters {sorted(unknown)}. Add them to DEFAULTS "
+                "if they are meant to be settable; passing them here would otherwise "
+                "be recorded but never applied."
+            )
+            raise ValueError(msg)
+
         settings = {**DEFAULTS, **{k: v for k, v in self.params.items() if k in DEFAULTS}}
         settings.update(
             {

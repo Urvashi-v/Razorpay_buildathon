@@ -469,8 +469,8 @@ def test_the_disabled_text_rung_is_not_registered(ladder_config: LadderConfig) -
 def test_cost_profiles_all_yield_a_usable_threshold(cost_config: CostModelConfig) -> None:
     """Every shipped profile must derive a threshold strictly inside (0, 1)."""
     from rto_sentinel.decision.threshold import derive_threshold
-    from rto_sentinel.models.experiment import _cost_inputs
+    from rto_sentinel.models.experiment import cost_inputs_from_profile
 
     for name, profile in cost_config.profiles.items():
-        derivation = derive_threshold(_cost_inputs(profile))
+        derivation = derive_threshold(cost_inputs_from_profile(profile))
         assert 0.0 < derivation.threshold < 1.0, name

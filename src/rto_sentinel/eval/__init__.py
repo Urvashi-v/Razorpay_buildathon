@@ -24,6 +24,14 @@ from rto_sentinel.eval.metrics import (
     recall_at_precision,
     roc_auc,
 )
+from rto_sentinel.eval.model_card import (
+    check_card,
+    metrics_rows,
+    render_model_card,
+    write_comparison_csv,
+    write_metrics_csv,
+    write_model_card,
+)
 from rto_sentinel.eval.report import (
     DishonestReportError,
     check_rendered_report,
@@ -39,6 +47,7 @@ __all__ = [
     "DishonestReportError",
     "bootstrap_metric",
     "calibration_metrics",
+    "check_card",
     "check_rendered_report",
     "check_report_rules",
     "comparison_table",
@@ -47,12 +56,17 @@ __all__ = [
     "do_nothing_net_per_1000",
     "economic_result",
     "expected_calibration_error",
+    "metrics_rows",
     "pr_auc",
     "precision_at_k",
     "ranking_metrics",
     "recall_at_precision",
     "render_markdown",
+    "render_model_card",
     "roc_auc",
     "strongest_rung",
+    "write_comparison_csv",
+    "write_metrics_csv",
+    "write_model_card",
     "write_report",
 ]

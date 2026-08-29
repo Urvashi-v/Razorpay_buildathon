@@ -224,12 +224,30 @@ without unpickling anything, so provenance can be inspected without executing a
 file. The API will load these artefacts in a later phase.
 
 `calibration.py` is a first-class component, not a postprocessing step: the
-entire decision layer depends on the score being an honest probability. Isotonic
-regression is fitted on **validation** — never train (calibrating to one's own
-overfitting), never test (contaminating the seal). **It is not applied yet**: every
-Phase 4 rung carries `calibration_method: null`, and the decision engine refuses
-a score whose calibration method is null, so no uncalibrated model can reach a
-decision.
+entire decision layer depends on the score being an honest probability. The
+calibrator is fitted on **validation** — never train (calibrating to one's own
+overfitting), never test (contaminating the seal). The Phase 4 ladder rungs
+remain uncalibrated and carry `calibration_method: null`; the Phase 5 model is a
+`CalibratedModel` composing one of them with a fitted calibrator.
+
+**The method is chosen by cross-validation inside the validation split**, not by
+fitting each candidate on validation and reading its error off the same rows.
+Isotonic regression in particular can drive that in-sample number close to zero
+while generalising worse than doing nothing, and `test_the_comparison_is_out_of_fold`
+measures exactly that optimism. `none` is always a candidate, so "calibrating did
+not help" is a result the pipeline can reach.
+
+Selection uses **two gates**: a candidate must improve expected calibration error
+by a configured margin *and* must not worsen the Brier score. ECE is computed
+over ten equal-width bins and is noisy — on two thousand rows a perfectly
+calibrated model still scores about 0.015 from sampling alone — so a flexible
+calibrator can "improve" it by fitting binning noise. Brier is a proper scoring
+rule and cannot be improved that way, so it acts as a veto.
+
+**`CalibratedModel` is a wrapper, not a flag.** The base model saw the training
+split and the calibrator saw the validation split; folding them into one object
+would hide the first thing anyone auditing a probability needs to know. It
+refuses a single-call `fit` for the same reason.
 
 ### 3.6 Decision engine (`decision/`) — the authority
 
@@ -489,12 +507,18 @@ reviewer to verify that in a minute.
 | Experiment records, ladder runner, results JSON | **Implemented and tested** |
 | Cost model and threshold derivation | **Implemented and tested** |
 | Metrics, economics, bootstrap, report, plots | **Implemented and tested** |
-| Calibration (isotonic on validation) | Interface fixed — Phase 5 |
-| Policy bands and decision engine | Interfaces fixed — Phase 5 |
-| Serving-path repositories (single order, decisions) | Interfaces fixed — Phase 5 |
-| Console: queue, sliders, charts, fairness | Phase 5 |
-| Fairness audit by cohort | Contract fixed — Phase 5 |
+| Calibration: isotonic, Platt, identity, cross-validated selection | **Implemented and tested** |
+| `CalibratedModel` wrapper and its artefact round-trip | **Implemented and tested** |
+| Hyperparameter search with the 1-SE tie rule | **Implemented and tested** |
+| Frozen selection manifest and sealed-set gating | **Implemented and tested** |
+| Final-model evaluation, metrics JSON/CSV, plots | **Implemented and exercised** |
+| Generated model card | **Implemented and tested** |
+| Policy bands and decision engine | Interfaces fixed — Phase 6 |
+| Serving-path repositories (single order, decisions) | Interfaces fixed — Phase 6 |
+| Console: queue, sliders, charts, fairness | Phase 6 |
+| Fairness audit by cohort | Contract fixed — Phase 6 |
 | Agent layer (4 jobs + grounding) | Interfaces fixed — Phase 6 |
+| Cohort/fairness audit execution | **Not run.** No fairness claim may be made until it is |
 | Drift monitoring, outcome loop | Interfaces fixed — Phase 6 |
 
 Unimplemented functions raise `NotImplementedError` with the phase named. They do
@@ -543,3 +567,20 @@ arithmetic is now hand-checked in
 beats rung 4 on both PR-AUC and net rupees, reproducibly across seeds. The
 mechanism was investigated rather than tuned away — see
 [docs/ladder_results.md](docs/ladder_results.md) and README § Honest metrics.
+Phase 5's capacity search closed most of that gap by shrinking the model rather
+than growing it.
+
+**Model selection uses a one-standard-error rule, not the highest number.** The
+validation split is about two thousand orders, so the 95% interval on PR-AUC
+spans roughly ±0.05 and a 0.005 gap between two candidates is noise. Every
+candidate within one standard error of the best is treated as tied, and the
+smallest model among those wins. The bias towards smaller is deliberate: the
+failure the search exists to fix was excess capacity.
+
+**The sealed set is opened by a separate command, gated on a frozen manifest.**
+`rto-sentinel final` writes a `SelectionManifest` containing every decision and a
+hash over those decisions; `rto-sentinel final-test` refuses to run without one,
+refuses to run twice without `--again`, requires a written unseal reason, and
+loads the frozen artefact rather than retraining. Re-rendering a report never
+requires re-measuring: `rto-sentinel final-report` reads saved artefacts and
+touches no split.

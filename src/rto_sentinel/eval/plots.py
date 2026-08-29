@@ -54,6 +54,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 
     from rto_sentinel.contracts.decision import CostInputs
     from rto_sentinel.contracts.experiment import LadderResults
+    from rto_sentinel.contracts.final import FinalEvaluation
 
 FIGSIZE = (9.0, 6.0)
 DPI = 130
@@ -268,4 +269,179 @@ def generate_all(
             scores, cost_inputs, results.threshold, output_dir / "threshold_sweep.png"
         ),
         plot_flag_rate_vs_precision(scores, output_dir / "flag_rate_vs_precision.png"),
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Phase 5: the final model
+# ---------------------------------------------------------------------------
+
+
+def plot_calibration_before_after(
+    evaluation: FinalEvaluation, path: Path, *, title_suffix: str = ""
+) -> Path:
+    """Reliability diagram for the raw and calibrated scores, on one axis.
+
+    Two curves rather than one, because "the model is calibrated" is a
+    comparative claim. The distance each curve sits from the diagonal is what
+    the calibration step did and did not fix, and bin populations are annotated
+    so a point built from nine orders is not read as a finding.
+    """
+    figure, axes = plt.subplots(figsize=FIGSIZE, dpi=DPI)
+    axes.plot([0, 1], [0, 1], linestyle="--", color="grey", linewidth=1.0, label="perfect")
+
+    series = (
+        ("uncalibrated", evaluation.uncalibrated_calibration, "tab:orange", "o"),
+        (
+            f"calibrated ({evaluation.calibration_method})",
+            evaluation.calibration,
+            "tab:blue",
+            "s",
+        ),
+    )
+    for label, metrics, colour, marker in series:
+        bins = metrics.reliability_bins
+        if not bins:
+            continue
+        predicted = [entry[0] for entry in bins]
+        observed = [entry[1] for entry in bins]
+        axes.plot(
+            predicted,
+            observed,
+            marker=marker,
+            color=colour,
+            linewidth=1.6,
+            label=f"{label} (ECE {metrics.expected_calibration_error:.3f})",
+        )
+        for x, y, count in bins:
+            axes.annotate(
+                f"{count:,}", (x, y), textcoords="offset points", xytext=(0, 6), fontsize=6
+            )
+
+    axes.set_xlabel("Mean predicted probability")
+    axes.set_ylabel("Observed RTO frequency")
+    axes.set_title(
+        f"Reliability - {evaluation.evaluated_split} split{title_suffix}\n"
+        "Distance from the diagonal is what calibration had to remove"
+    )
+    axes.set_xlim(0.0, 1.0)
+    axes.set_ylim(0.0, 1.0)
+    axes.legend(loc="upper left", fontsize=8)
+    axes.grid(alpha=0.25)
+    figure.tight_layout()
+    figure.savefig(path)
+    plt.close(figure)
+    return path
+
+
+def plot_precision_recall_analysis(
+    y_true: np.ndarray, y_prob: np.ndarray, threshold: float, path: Path, *, split: str
+) -> Path:
+    """Precision, recall and flag rate against the operating threshold.
+
+    The chart an operations team reads before agreeing to a threshold: what share
+    of orders gets frictioned, how many of those are right, and how much of the
+    problem is caught. The derived operating point is marked so the trade being
+    made is visible rather than asserted.
+    """
+    grid = np.linspace(0.01, 0.99, 99)
+    precision, recall, flag_rate = [], [], []
+    for value in grid:
+        matrix = confusion_at_threshold(y_true, y_prob, float(value))
+        precision.append(matrix.precision)
+        recall.append(matrix.recall)
+        flag_rate.append(matrix.flag_rate)
+
+    figure, axes = plt.subplots(figsize=FIGSIZE, dpi=DPI)
+    axes.plot(grid, precision, label="precision", linewidth=1.8)
+    axes.plot(grid, recall, label="recall", linewidth=1.8)
+    axes.plot(grid, flag_rate, label="flag rate", linewidth=1.8, linestyle="--")
+    axes.axhline(
+        float(np.mean(y_true)),
+        color="grey",
+        linestyle=":",
+        linewidth=1.0,
+        label=f"base rate ({np.mean(y_true):.3f})",
+    )
+    axes.axvline(
+        threshold,
+        color="black",
+        linestyle="--",
+        linewidth=1.2,
+        label=f"cost-derived threshold ({threshold:.3f})",
+    )
+    axes.set_xlabel("Decision threshold (calibrated probability)")
+    axes.set_ylabel("Rate")
+    axes.set_title(
+        f"Precision, recall and flag rate - {split} split\n"
+        "Precision alone says nothing; the flag rate beside it is what it costs"
+    )
+    axes.set_xlim(0.0, 1.0)
+    axes.set_ylim(0.0, 1.0)
+    axes.legend(loc="upper right", fontsize=8)
+    axes.grid(alpha=0.25)
+    figure.tight_layout()
+    figure.savefig(path)
+    plt.close(figure)
+    return path
+
+
+def plot_final_pr_curve(
+    y_true: np.ndarray, y_prob: np.ndarray, path: Path, *, split: str, pr_auc_value: float
+) -> Path:
+    """The final model's precision-recall curve against the base-rate floor."""
+    base_rate = float(np.mean(y_true))
+    precision, recall, _ = precision_recall_curve(y_true, y_prob)
+
+    figure, axes = plt.subplots(figsize=FIGSIZE, dpi=DPI)
+    # Drop sklearn's trailing sentinel point, which no threshold achieves.
+    axes.plot(recall[:-1], precision[:-1], linewidth=1.8, label=f"PR-AUC {pr_auc_value:.3f}")
+    axes.axhline(
+        base_rate,
+        linestyle="--",
+        color="grey",
+        linewidth=1.0,
+        label=f"base rate ({base_rate:.3f})",
+    )
+    axes.set_xlabel("Recall")
+    axes.set_ylabel("Precision")
+    axes.set_title(
+        f"Precision-recall - final model, {split} split\nThe base rate is the floor, not zero"
+    )
+    axes.set_xlim(0.0, 1.0)
+    axes.set_ylim(0.0, 1.0)
+    axes.legend(loc="upper right", fontsize=8)
+    axes.grid(alpha=0.25)
+    figure.tight_layout()
+    figure.savefig(path)
+    plt.close(figure)
+    return path
+
+
+def generate_final_plots(
+    evaluation: FinalEvaluation,
+    y_true: np.ndarray,
+    calibrated: np.ndarray,
+    threshold: float,
+    output_dir: Path,
+) -> list[Path]:
+    """Every figure for one final-model evaluation. Returns the paths written."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    split = evaluation.evaluated_split
+    return [
+        plot_calibration_before_after(evaluation, output_dir / f"reliability__{split}.png"),
+        plot_precision_recall_analysis(
+            y_true,
+            calibrated,
+            threshold,
+            output_dir / f"precision_recall__{split}.png",
+            split=split,
+        ),
+        plot_final_pr_curve(
+            y_true,
+            calibrated,
+            output_dir / f"pr_curve__{split}.png",
+            split=split,
+            pr_auc_value=evaluation.ranking.pr_auc.value,
+        ),
     ]

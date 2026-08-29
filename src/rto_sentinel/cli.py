@@ -24,6 +24,7 @@ produced it - and regenerated from them.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import sys
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
@@ -49,6 +50,7 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
     import pandas as pd
 
     from rto_sentinel.contracts.experiment import LadderResults
+    from rto_sentinel.contracts.final import FinalEvaluation, SelectionManifest
     from rto_sentinel.features.dataset import ModelingDataset
 
 # ---------------------------------------------------------------------------
@@ -564,12 +566,377 @@ def _cmd_train(args: argparse.Namespace) -> int:
 def _write_plots(results: LadderResults, scores: pd.DataFrame, settings: Settings) -> list[Path]:
     from rto_sentinel.configuration import load_cost_model_config
     from rto_sentinel.eval.plots import generate_all
-    from rto_sentinel.models.experiment import _cost_inputs
+    from rto_sentinel.models.experiment import cost_inputs_from_profile
 
     cost_config = load_cost_model_config(settings)
-    cost_inputs = _cost_inputs(cost_config.profiles[results.cost_profile])
+    cost_inputs = cost_inputs_from_profile(cost_config.profiles[results.cost_profile])
     output = settings.artifact_path / "reports" / results.dataset_run_id
     return generate_all(results, scores, cost_inputs, output)
+
+
+# ---------------------------------------------------------------------------
+# the final model: selection, calibration, and the one test-set read
+# ---------------------------------------------------------------------------
+
+
+def _or_dash(value: float | None) -> str:
+    return "-" if value is None else f"{value:.3f}"
+
+
+def _print_selection(manifest: SelectionManifest) -> None:
+    print("\ncandidate search (fitted on train, scored on validation)")
+    header = f"  {'candidate':<20}{'val PR-AUC':>12}{'train':>9}{'trn-val':>9}{'fit s':>8}"
+    print(header)
+    print("  " + "-" * (len(header) - 2))
+    for candidate in manifest.candidates:
+        gap = candidate.overfit_gap
+        mark = "*" if candidate.selected else " "
+        train_pr = candidate.train_pr_auc if candidate.train_pr_auc is not None else float("nan")
+        print(
+            f" {mark}{candidate.name:<20}{candidate.validation_pr_auc:>12.4f}"
+            f"{train_pr:>9.4f}{gap if gap is not None else float('nan'):>+9.3f}"
+            f"{candidate.train_duration_seconds:>8.1f}"
+        )
+
+    print("\ncalibration (cross-validated inside validation, never fitted on test)")
+    header = f"  {'method':<20}{'ECE':>12}{'Brier':>9}{'vs none':>10}"
+    print(header)
+    print("  " + "-" * (len(header) - 2))
+    for method in manifest.calibration_candidates:
+        mark = "*" if method.selected else " "
+        print(
+            f" {mark}{method.method:<20}{method.expected_calibration_error:>12.4f}"
+            f"{method.brier_score:>9.4f}{method.improvement_over_none:>+10.4f}"
+        )
+
+
+def _print_evaluation(evaluation: FinalEvaluation, *, caveat: str = "") -> None:
+    ranking, point = evaluation.ranking, evaluation.operating_point
+    net = evaluation.economics.net_inr_saved_per_1000_orders
+    print(f"\n{evaluation.evaluated_split} split ({evaluation.evaluation_summary.n_rows:,} orders)")
+    if caveat:
+        print(f"  {caveat}")
+    print(
+        f"  PR-AUC        : {ranking.pr_auc.value:.4f} "
+        f"[{ranking.pr_auc.ci_low:.4f}, {ranking.pr_auc.ci_high:.4f}]"
+        f"   (uncalibrated {evaluation.uncalibrated_pr_auc:.4f})"
+    )
+    print(
+        f"  ROC-AUC       : {ranking.roc_auc.value:.4f} "
+        f"[{ranking.roc_auc.ci_low:.4f}, {ranking.roc_auc.ci_high:.4f}]"
+    )
+    print(f"  Recall@P80    : {_or_dash(ranking.recall_at_precision_80)}")
+    print(f"  Recall@P90    : {_or_dash(ranking.recall_at_precision_90)}")
+    print(
+        f"  Brier         : {evaluation.calibration.brier_score:.4f}"
+        f"   (uncalibrated {evaluation.uncalibrated_calibration.brier_score:.4f})"
+    )
+    print(
+        f"  ECE           : {evaluation.calibration.expected_calibration_error:.4f}"
+        f"   (uncalibrated "
+        f"{evaluation.uncalibrated_calibration.expected_calibration_error:.4f})"
+    )
+    print(f"  threshold     : {point.threshold:.4f}  ({point.threshold_source})")
+    print(
+        f"  flag/prec/rec/F1: {point.flag_rate:.3f} / {_or_dash(point.precision)} / "
+        f"{_or_dash(point.recall)} / {_or_dash(point.f1)}"
+    )
+    print(
+        f"  confusion     : TP {point.true_positives:,}  FP {point.false_positives:,}  "
+        f"FN {point.false_negatives:,}  TN {point.true_negatives:,}"
+    )
+    print(
+        f"  net INR/1k    : {net.value:,.0f} [{net.ci_low:,.0f}, {net.ci_high:,.0f}]"
+        f"   (FP cost INR {evaluation.economics.total_false_positive_cost_inr:,.0f})"
+    )
+
+
+def _latest_ladder_results(settings: Settings, dataset_run_id: str) -> LadderResults | None:
+    """The Phase 4 ladder for this dataset, if one was measured.
+
+    Matched on dataset run: comparing the final model against a ladder measured
+    on different data would be a comparison of two different problems.
+    """
+    from rto_sentinel.contracts.experiment import LadderResults as Results
+
+    directory = settings.artifact_path / "experiments" / dataset_run_id
+    candidates = sorted(directory.glob("ladder__validation__*.json"))
+    if not candidates:
+        return None
+    newest = max(candidates, key=lambda path: path.stat().st_mtime)
+    return Results.model_validate_json(newest.read_text(encoding="utf-8"))
+
+
+def _write_final_outputs(
+    manifest: SelectionManifest,
+    evaluations: dict[str, FinalEvaluation],
+    settings: Settings,
+) -> None:
+    """Metrics CSV, comparison CSV and the model card. Regenerated every run."""
+    from rto_sentinel.configuration import load_model_card_config
+    from rto_sentinel.eval import write_comparison_csv, write_metrics_csv, write_model_card
+    from rto_sentinel.models import final_dir
+
+    directory = final_dir(settings.artifact_path, manifest.dataset_run_id)
+    metrics_csv = write_metrics_csv(evaluations, directory / "metrics.csv")
+    print(f"metrics CSV              : {metrics_csv}")
+
+    ladder = _latest_ladder_results(settings, manifest.dataset_run_id)
+    comparison_csv = write_comparison_csv(evaluations, ladder, directory / "comparison.csv")
+    print(f"comparison CSV           : {comparison_csv}")
+
+    card_path = write_model_card(
+        load_model_card_config(settings),
+        manifest,
+        evaluations,
+        REPO_ROOT / "docs" / "model_card.md",
+        ladder=ladder,
+    )
+    print(f"model card               : {card_path}")
+
+
+def _final_artifact_path(settings: Settings, manifest: SelectionManifest) -> Path | None:
+    """The saved artefact matching the frozen model version, if it is present."""
+    from rto_sentinel.models import list_artifacts
+
+    for path, card in list_artifacts(settings.artifact_path):
+        if card.model_version == manifest.model_version:
+            return path
+    return None
+
+
+def _cmd_final(args: argparse.Namespace) -> int:
+    """Select, calibrate and freeze the final model. Reads validation only."""
+    from rto_sentinel.configuration import load_cost_model_config, load_final_model_config
+    from rto_sentinel.eval.plots import generate_final_plots
+    from rto_sentinel.models import (
+        build_final_model,
+        evaluate_final_model,
+        final_dir,
+        save_evaluation,
+        save_manifest,
+    )
+    from rto_sentinel.models.experiment import cost_inputs_from_profile
+    from rto_sentinel.models.final import scores_frame as final_scores_frame
+
+    settings = get_settings()
+    dataset, params = _load_or_build_dataset(args, settings)
+    final_config = load_final_model_config(settings)
+    cost_config = load_cost_model_config(settings)
+
+    print(
+        f"\ntrain={dataset.train.n_rows:,}  validation={dataset.validation.n_rows:,}  "
+        f"features={len(dataset.feature_set)}  "
+        f"positive rate (validation)={dataset.validation.positive_rate:.4f}"
+    )
+    print(f"\nselecting over {len(final_config.search.candidates)} candidates...")
+
+    final = build_final_model(
+        dataset,
+        final_config=final_config,
+        cost_config=cost_config,
+        seed=params.seed,
+        artifact_root=settings.artifact_path if not args.no_write else None,
+    )
+    manifest = final.manifest
+    _print_selection(manifest)
+
+    print(f"\nselected      : {manifest.chosen_candidate} + {manifest.calibration_method}")
+    print(f"tie rule      : {final_config.search.tie_rule}")
+    print(f"model         : {final.model.name}  v{manifest.model_version}")
+    print(f"manifest      : {manifest.manifest_id}")
+    print(f"threshold     : {manifest.threshold:.4f}  ({manifest.threshold_source})")
+
+    cost_inputs = cost_inputs_from_profile(cost_config.profiles[manifest.cost_profile])
+    evaluation, calibrated, raw = evaluate_final_model(
+        final.model,
+        dataset.validation,
+        manifest=manifest,
+        cost_inputs=cost_inputs,
+        bootstrap_iterations=args.bootstrap,
+    )
+    _print_evaluation(
+        evaluation,
+        caveat=(
+            "SELECTION-CONTAMINATED: hyperparameters were chosen on this split and the "
+            "shipped calibrator was refitted on it. The honest read is the test set."
+        ),
+    )
+    print("\nthe test split has NOT been read. Run `rto-sentinel final-test` for that.")
+
+    if args.no_write:
+        return 0
+
+    manifest_path = save_manifest(manifest, settings.artifact_path)
+    print(f"\nfrozen manifest          : {manifest_path}")
+    metrics_path = save_evaluation(evaluation, settings.artifact_path)
+    print(f"validation metrics       : {metrics_path}")
+
+    directory = final_dir(settings.artifact_path, manifest.dataset_run_id)
+    scores_path = directory / "scores__validation.parquet"
+    final_scores_frame(dataset.validation, calibrated, raw).to_parquet(scores_path, index=False)
+    print(f"per-order scores         : {scores_path}")
+
+    for path in generate_final_plots(
+        evaluation,
+        dataset.validation.y.to_numpy(dtype=bool),
+        calibrated,
+        manifest.threshold,
+        directory,
+    ):
+        print(f"plot                     : {path}")
+
+    _write_final_outputs(manifest, {"validation": evaluation}, settings)
+    if final.artifact_path is not None:
+        print(f"model artefact           : {final.artifact_path}")
+    return 0
+
+
+def _cmd_final_test(args: argparse.Namespace) -> int:
+    """The single sealed-set evaluation. Requires a frozen manifest and a reason."""
+    from rto_sentinel.configuration import load_cost_model_config
+    from rto_sentinel.eval.plots import generate_final_plots
+    from rto_sentinel.models import (
+        evaluate_final_model,
+        final_dir,
+        load_evaluation,
+        load_manifest,
+        save_evaluation,
+    )
+    from rto_sentinel.models.calibrated import CalibratedModel
+    from rto_sentinel.models.experiment import cost_inputs_from_profile
+    from rto_sentinel.models.final import scores_frame as final_scores_frame
+
+    settings = get_settings()
+    dataset, _ = _load_or_build_dataset(args, settings)
+
+    try:
+        manifest = load_manifest(settings.artifact_path, dataset.metadata.dataset_run_id)
+    except FileNotFoundError as error:
+        print(str(error), file=sys.stderr)
+        return 1
+
+    directory = final_dir(settings.artifact_path, manifest.dataset_run_id)
+    if (directory / "metrics__test.json").is_file() and not args.again:
+        existing = load_evaluation(settings.artifact_path, manifest.dataset_run_id, "test")
+        print(
+            "the sealed test set has already been scored for this dataset and manifest.\n"
+            f"  evaluated at : {existing.evaluated_at.isoformat()}\n"
+            f"  reason       : {existing.unseal_reason}\n"
+            "Scoring it repeatedly turns a held-out set into a validation set. Pass --again "
+            "only if you understand that, and say why in --unseal-reason.",
+            file=sys.stderr,
+        )
+        return 1
+
+    # Load the artefact that was frozen rather than retraining. Retraining would
+    # reproduce it - the pipeline is deterministic - but "the model we tested" and
+    # "a model we rebuilt from the same recipe" are different claims.
+    artifact = _final_artifact_path(settings, manifest)
+    if artifact is None:
+        print(
+            f"no model artefact for version {manifest.model_version}. Re-run "
+            "`rto-sentinel final` to write one.",
+            file=sys.stderr,
+        )
+        return 1
+    model, card = CalibratedModel.load(artifact)
+
+    print("\n" + "=" * 78, file=sys.stderr)
+    print(
+        "SEALED TEST SET. This is the single final evaluation of the final model.\n"
+        f"  manifest  : {manifest.manifest_id} frozen {manifest.frozen_at.isoformat()}\n"
+        f"  model     : {card.model_name} v{card.model_version} "
+        f"({card.calibration_method} calibration, fitted on {card.calibration_fitted_on})\n"
+        f"  threshold : {manifest.threshold:.4f} - derived from costs, not from these labels\n"
+        f"  reason    : {args.unseal_reason}",
+        file=sys.stderr,
+    )
+    print("=" * 78 + "\n", file=sys.stderr)
+
+    dataset.unseal_test(reason=args.unseal_reason)
+    cost_config = load_cost_model_config(settings)
+    cost_inputs = cost_inputs_from_profile(cost_config.profiles[manifest.cost_profile])
+
+    evaluation, calibrated, raw = evaluate_final_model(
+        model,
+        dataset.test,
+        manifest=manifest,
+        cost_inputs=cost_inputs,
+        bootstrap_iterations=args.bootstrap,
+        unseal_reason=args.unseal_reason,
+    )
+    _print_evaluation(evaluation)
+
+    if args.no_write:
+        return 0
+
+    metrics_path = save_evaluation(evaluation, settings.artifact_path)
+    print(f"\ntest metrics             : {metrics_path}")
+
+    scores_path = directory / "scores__test.parquet"
+    final_scores_frame(dataset.test, calibrated, raw).to_parquet(scores_path, index=False)
+    print(f"per-order scores         : {scores_path}")
+
+    for path in generate_final_plots(
+        evaluation,
+        dataset.test.y.to_numpy(dtype=bool),
+        calibrated,
+        manifest.threshold,
+        directory,
+    ):
+        print(f"plot                     : {path}")
+
+    # The card shows validation beside test when both exist, so a reader can see
+    # what selecting on validation cost. Test alone is still a complete card.
+    evaluations: dict[str, FinalEvaluation] = {"test": evaluation}
+    with contextlib.suppress(FileNotFoundError):
+        evaluations = {
+            "validation": load_evaluation(
+                settings.artifact_path, manifest.dataset_run_id, "validation"
+            ),
+            "test": evaluation,
+        }
+    _write_final_outputs(manifest, evaluations, settings)
+    return 0
+
+
+def _cmd_final_report(args: argparse.Namespace) -> int:
+    """Re-render the model card and CSVs from saved artefacts. Reads no split.
+
+    Separate from `final` and `final-test` on purpose. Improving how a result is
+    presented must never require re-running the measurement, because re-running
+    the sealed measurement is the one thing the seal exists to prevent. This
+    command touches the manifest and the metrics JSON and nothing else.
+    """
+    from rto_sentinel.models import load_evaluation, load_manifest
+
+    settings = get_settings()
+    root = settings.artifact_path / "final"
+    runs = sorted(root.glob("*/selection_manifest.json")) if root.is_dir() else []
+    if not runs:
+        print(
+            "no frozen selection manifest found. Run `rto-sentinel final` first.",
+            file=sys.stderr,
+        )
+        return 1
+
+    newest = max(runs, key=lambda path: path.stat().st_mtime)
+    dataset_run_id = newest.parent.name
+    manifest = load_manifest(settings.artifact_path, dataset_run_id)
+
+    evaluations: dict[str, FinalEvaluation] = {}
+    for split in ("validation", "test"):
+        with contextlib.suppress(FileNotFoundError):
+            evaluations[split] = load_evaluation(settings.artifact_path, dataset_run_id, split)
+    if not evaluations:
+        print(f"no evaluations saved for dataset {dataset_run_id}.", file=sys.stderr)
+        return 1
+
+    print(f"manifest {manifest.manifest_id} (dataset {dataset_run_id})")
+    print(f"splits   : {', '.join(evaluations)}")
+    _write_final_outputs(manifest, evaluations, settings)
+    return 0
 
 
 def _cmd_evaluate(args: argparse.Namespace) -> int:
@@ -727,6 +1094,50 @@ def build_parser() -> argparse.ArgumentParser:
         help="bootstrap iterations for confidence intervals (0 disables, tests only)",
     )
     train.set_defaults(func=_cmd_train)
+
+    final = sub.add_parser(
+        "final",
+        help="select, calibrate and freeze the final model (reads validation, never test)",
+    )
+    _add_generation_arguments(final)
+    final.add_argument("--no-write", action="store_true", help="skip writing artefacts")
+    final.add_argument(
+        "--bootstrap",
+        type=int,
+        default=500,
+        help="bootstrap iterations for confidence intervals (0 disables, tests only)",
+    )
+    final.set_defaults(func=_cmd_final)
+
+    final_test = sub.add_parser(
+        "final-test",
+        help="score the SEALED test set once, using the frozen manifest and artefact",
+    )
+    _add_generation_arguments(final_test)
+    final_test.add_argument(
+        "--unseal-reason",
+        required=True,
+        help="written justification for opening the sealed split. Recorded in the artefact.",
+    )
+    final_test.add_argument(
+        "--again",
+        action="store_true",
+        help="score the sealed set again despite a previous test evaluation for this manifest",
+    )
+    final_test.add_argument("--no-write", action="store_true", help="skip writing artefacts")
+    final_test.add_argument(
+        "--bootstrap",
+        type=int,
+        default=500,
+        help="bootstrap iterations for confidence intervals (0 disables, tests only)",
+    )
+    final_test.set_defaults(func=_cmd_final_test)
+
+    final_report = sub.add_parser(
+        "final-report",
+        help="re-render the model card and CSVs from saved artefacts (reads no split)",
+    )
+    final_report.set_defaults(func=_cmd_final_report)
 
     evaluate = sub.add_parser(
         "evaluate", help="re-render the comparison from saved experiment artefacts"

@@ -89,7 +89,7 @@ class TrainedRung:
     artifact_path: Path | None
 
 
-def _split_summary(view: SplitView) -> SplitSummary:
+def split_summary(view: SplitView) -> SplitSummary:
     first, last = view.date_range
     first_day, last_day = view.day_range
     return SplitSummary(
@@ -115,7 +115,7 @@ def _nullable(value: float) -> float | None:
     return None if not np.isfinite(value) else float(value)
 
 
-def _threshold_metrics(
+def threshold_metrics_at(
     y_true: np.ndarray, y_prob: np.ndarray, threshold: float, source: str
 ) -> ThresholdMetrics:
     matrix = confusion_at_threshold(y_true, y_prob, threshold)
@@ -209,8 +209,10 @@ def train_rung(
         seed=seed,
     )
 
-    thresholds = [_threshold_metrics(y_true, scores, threshold, "cost-derived")]
-    thresholds += [_threshold_metrics(y_true, scores, value, "sweep") for value in SWEEP_THRESHOLDS]
+    thresholds = [threshold_metrics_at(y_true, scores, threshold, "cost-derived")]
+    thresholds += [
+        threshold_metrics_at(y_true, scores, value, "sweep") for value in SWEEP_THRESHOLDS
+    ]
 
     metadata = dataset.metadata
     model_version = _model_version(rung_name, metadata.dataset_run_id, seed, params)
@@ -258,8 +260,8 @@ def train_rung(
         evaluated_split=evaluation_split,
         split_strategy=metadata.split_strategy,
         split_pool_shares=metadata.split_pool_shares,
-        train_summary=_split_summary(train),
-        evaluation_summary=_split_summary(evaluation),
+        train_summary=split_summary(train),
+        evaluation_summary=split_summary(evaluation),
         ranking=ranking,
         calibration=calibration,
         threshold_metrics=thresholds,
@@ -292,7 +294,7 @@ def run_ladder(
     """Train and evaluate every enabled rung under identical conditions."""
     profile_name = cost_profile or cost_config.default_profile
     profile = cost_config.profiles[profile_name]
-    cost_inputs = _cost_inputs(profile)
+    cost_inputs = cost_inputs_from_profile(profile)
 
     derivation = derive_threshold(cost_inputs)
     threshold = derivation.threshold
@@ -331,7 +333,7 @@ def run_ladder(
     return results, trained
 
 
-def _cost_inputs(profile: Any) -> CostInputs:
+def cost_inputs_from_profile(profile: Any) -> CostInputs:
     from rto_sentinel.contracts.decision import CostInputs
 
     return CostInputs(

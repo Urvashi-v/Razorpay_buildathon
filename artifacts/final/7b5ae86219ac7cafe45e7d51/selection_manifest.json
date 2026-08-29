@@ -1,0 +1,434 @@
+{
+  "selection_version": "1.0.0",
+  "frozen_at": "2026-08-29T02:17:52.499858Z",
+  "base_rung": "lightgbm",
+  "chosen_candidate": "minimal",
+  "chosen_params": {
+    "n_estimators": 120,
+    "learning_rate": 0.08,
+    "num_leaves": 7,
+    "min_child_samples": 120,
+    "colsample_bytree": 0.7,
+    "reg_lambda": 5.0,
+    "random_state": 7
+  },
+  "calibration_method": "platt",
+  "calibration_fitted_on": "validation",
+  "calibration_folds": 5,
+  "threshold": 0.34814814814814815,
+  "threshold_source": "derived from cost inputs: C_fp=70.50, S_tp=132.00",
+  "cost_profile": "mid_margin_d2c",
+  "model_version": "a0d780424b79",
+  "generator_version": "1.0.0",
+  "dataset_run_id": "7b5ae86219ac7cafe45e7d51",
+  "feature_version": "1.0.0",
+  "feature_fingerprint": "798aef57ad3cefe94cfeeb9555287fefda16e0c502f236f7e226590923531dfb",
+  "config_fingerprint": "f3943b6937cf0b36164e1fec043e25fc8c4eab1bc684887d778f14a268ebf251",
+  "seed": 7,
+  "candidates": [
+    {
+      "name": "phase4_as_shipped",
+      "note": "The rung-4 configuration Phase 4 measured. The incumbent.",
+      "params": {
+        "n_estimators": 600,
+        "learning_rate": 0.05,
+        "num_leaves": 31,
+        "min_child_samples": 40,
+        "colsample_bytree": 0.8,
+        "reg_lambda": 0.0,
+        "random_state": 7
+      },
+      "train_pr_auc": 0.9618811695804551,
+      "validation_pr_auc": 0.4429588863302478,
+      "validation_pr_auc_ci": [
+        0.3968116289854894,
+        0.5027890267150009
+      ],
+      "train_duration_seconds": 1.8529406999587081,
+      "selected": false
+    },
+    {
+      "name": "fewer_trees",
+      "note": "Same shape, a third of the trees. Isolates trees from tree size.",
+      "params": {
+        "n_estimators": 200,
+        "learning_rate": 0.05,
+        "num_leaves": 31,
+        "min_child_samples": 40,
+        "colsample_bytree": 0.8,
+        "reg_lambda": 0.0,
+        "random_state": 7
+      },
+      "train_pr_auc": 0.7268910933827608,
+      "validation_pr_auc": 0.47305390986338,
+      "validation_pr_auc_ci": [
+        0.43368869889992223,
+        0.531210435201098
+      ],
+      "train_duration_seconds": 0.7353860000148416,
+      "selected": false
+    },
+    {
+      "name": "smaller_trees",
+      "note": "Fewer leaves and a larger leaf minimum. Isolates tree size.",
+      "params": {
+        "n_estimators": 400,
+        "learning_rate": 0.05,
+        "num_leaves": 15,
+        "min_child_samples": 80,
+        "colsample_bytree": 0.8,
+        "reg_lambda": 0.0,
+        "random_state": 7
+      },
+      "train_pr_auc": 0.6824004392476068,
+      "validation_pr_auc": 0.4720259958645493,
+      "validation_pr_auc_ci": [
+        0.4332146646680696,
+        0.5243625821595331
+      ],
+      "train_duration_seconds": 0.9548511999892071,
+      "selected": false
+    },
+    {
+      "name": "constrained",
+      "note": "Both dials down together, the configuration Phase 4's diagnostic pointed at.",
+      "params": {
+        "n_estimators": 150,
+        "learning_rate": 0.05,
+        "num_leaves": 15,
+        "min_child_samples": 60,
+        "colsample_bytree": 0.8,
+        "reg_lambda": 1.0,
+        "random_state": 7
+      },
+      "train_pr_auc": 0.5553327586550962,
+      "validation_pr_auc": 0.476896172756211,
+      "validation_pr_auc_ci": [
+        0.4350637588685044,
+        0.5355114972582069
+      ],
+      "train_duration_seconds": 0.4850021000020206,
+      "selected": false
+    },
+    {
+      "name": "shallow_and_slow",
+      "note": "Very small trees, low learning rate, many of them. The classic low-variance shape.",
+      "params": {
+        "n_estimators": 500,
+        "learning_rate": 0.03,
+        "num_leaves": 7,
+        "min_child_samples": 100,
+        "colsample_bytree": 0.7,
+        "reg_lambda": 5.0,
+        "random_state": 7
+      },
+      "train_pr_auc": 0.5209967165390677,
+      "validation_pr_auc": 0.47990749101511027,
+      "validation_pr_auc_ci": [
+        0.43780453061434743,
+        0.5316634370714008
+      ],
+      "train_duration_seconds": 0.9938052999787033,
+      "selected": false
+    },
+    {
+      "name": "regularised",
+      "note": "Phase 4 capacity held, heavy L2. Tests whether the penalty alone is enough.",
+      "params": {
+        "n_estimators": 600,
+        "learning_rate": 0.05,
+        "num_leaves": 31,
+        "min_child_samples": 40,
+        "colsample_bytree": 0.8,
+        "reg_lambda": 20.0,
+        "random_state": 7
+      },
+      "train_pr_auc": 0.8568909899998495,
+      "validation_pr_auc": 0.4598783812164885,
+      "validation_pr_auc_ci": [
+        0.41514694153091575,
+        0.5176068102103455
+      ],
+      "train_duration_seconds": 2.2262469999841414,
+      "selected": false
+    },
+    {
+      "name": "minimal",
+      "note": "Deliberately underpowered. If this wins, the signal is close to linear.",
+      "params": {
+        "n_estimators": 120,
+        "learning_rate": 0.08,
+        "num_leaves": 7,
+        "min_child_samples": 120,
+        "colsample_bytree": 0.7,
+        "reg_lambda": 5.0,
+        "random_state": 7
+      },
+      "train_pr_auc": 0.4959016675858047,
+      "validation_pr_auc": 0.4843864243484617,
+      "validation_pr_auc_ci": [
+        0.44286019794982157,
+        0.536651132161113
+      ],
+      "train_duration_seconds": 0.3613333000103012,
+      "selected": true
+    }
+  ],
+  "calibration_candidates": [
+    {
+      "method": "none",
+      "expected_calibration_error": 0.028526308293550698,
+      "brier_score": 0.1246625270637251,
+      "improvement_over_none": 0.0,
+      "n_folds": 5,
+      "fitted_on": "validation",
+      "selected": false,
+      "reliability_bins": [
+        [
+          0.02893150479922949,
+          0.038901601830663615,
+          874
+        ],
+        [
+          0.14817135984334492,
+          0.16417910447761194,
+          469
+        ],
+        [
+          0.24554901799229054,
+          0.2892857142857143,
+          280
+        ],
+        [
+          0.3460050294824487,
+          0.43137254901960786,
+          204
+        ],
+        [
+          0.4462022548591064,
+          0.39473684210526316,
+          114
+        ],
+        [
+          0.5416283319626044,
+          0.6444444444444445,
+          45
+        ],
+        [
+          0.6494363912280923,
+          0.6764705882352942,
+          34
+        ],
+        [
+          0.7337985522476761,
+          0.7857142857142857,
+          14
+        ]
+      ]
+    },
+    {
+      "method": "isotonic",
+      "expected_calibration_error": 0.0170395789463168,
+      "brier_score": 0.1258510854358473,
+      "improvement_over_none": 0.011486729347233899,
+      "n_folds": 5,
+      "fitted_on": "validation",
+      "selected": false,
+      "reliability_bins": [
+        [
+          0.0250457415263455,
+          0.03469640644361834,
+          807
+        ],
+        [
+          0.15828205430126882,
+          0.1572052401746725,
+          458
+        ],
+        [
+          0.2405859213804704,
+          0.26126126126126126,
+          222
+        ],
+        [
+          0.3402144440146016,
+          0.3,
+          200
+        ],
+        [
+          0.4293311301919672,
+          0.4279661016949153,
+          236
+        ],
+        [
+          0.5419468160872294,
+          0.4642857142857143,
+          28
+        ],
+        [
+          0.6345874762825249,
+          0.7380952380952381,
+          42
+        ],
+        [
+          0.7230882027486444,
+          0.5666666666666667,
+          30
+        ],
+        [
+          0.8415584415584416,
+          0.8,
+          5
+        ],
+        [
+          1.0,
+          0.6666666666666666,
+          6
+        ]
+      ]
+    },
+    {
+      "method": "platt",
+      "expected_calibration_error": 0.012243110677132326,
+      "brier_score": 0.1240847530959816,
+      "improvement_over_none": 0.016283197616418374,
+      "n_folds": 5,
+      "fitted_on": "validation",
+      "selected": true,
+      "reliability_bins": [
+        [
+          0.031529411665022905,
+          0.028117359413202935,
+          818
+        ],
+        [
+          0.154291422587637,
+          0.16377171215880892,
+          403
+        ],
+        [
+          0.24595143210454865,
+          0.23717948717948717,
+          312
+        ],
+        [
+          0.3491520381272449,
+          0.38288288288288286,
+          222
+        ],
+        [
+          0.4431084328800952,
+          0.42142857142857143,
+          140
+        ],
+        [
+          0.5414675312297943,
+          0.5061728395061729,
+          81
+        ],
+        [
+          0.6530193317798326,
+          0.6857142857142857,
+          35
+        ],
+        [
+          0.7403218828353392,
+          0.6956521739130435,
+          23
+        ]
+      ]
+    }
+  ],
+  "feature_names": [
+    "cust_account_age_days",
+    "cust_prior_order_count",
+    "cust_prior_cod_count",
+    "cust_prepaid_share",
+    "cust_prior_resolved_count",
+    "cust_prior_rto_count",
+    "cust_prior_rto_rate",
+    "cust_prior_rto_rate_smoothed",
+    "cust_days_since_last_order",
+    "cust_prior_value_mean",
+    "cust_value_vs_prior_mean",
+    "cust_mean_resolution_days",
+    "cust_is_new",
+    "temporal_orders_last_7d",
+    "temporal_orders_last_30d",
+    "temporal_orders_last_90d",
+    "temporal_rto_count_last_30d",
+    "temporal_rto_rate_last_30d",
+    "temporal_rto_count_last_90d",
+    "temporal_rto_rate_last_90d",
+    "temporal_days_since_last_rto",
+    "temporal_order_burst",
+    "order_value_inr",
+    "order_log_value",
+    "order_is_cod",
+    "order_discount_depth",
+    "order_discount_inr",
+    "order_item_count",
+    "order_value_per_item",
+    "order_category",
+    "order_cart_edited",
+    "addr_token_count",
+    "addr_has_house_number",
+    "addr_has_floor_number",
+    "addr_has_landmark",
+    "addr_pincode_city_consistent",
+    "addr_allcaps_ratio",
+    "addr_gibberish_ratio",
+    "addr_completeness_score",
+    "addr_is_new_for_customer",
+    "session_product_page_seconds",
+    "session_sessions_before_purchase",
+    "session_time_to_checkout_seconds",
+    "session_device_class",
+    "session_hour_of_day",
+    "session_day_of_week",
+    "session_is_late_night",
+    "session_is_sale_day",
+    "session_cod_after_prepaid_failure",
+    "geo_pincode_tier",
+    "geo_pincode_rto_rate_smoothed",
+    "geo_pincode_resolved_count",
+    "geo_courier_partner",
+    "geo_courier_rto_rate_smoothed"
+  ],
+  "families_used": [
+    "customer_history",
+    "temporal",
+    "order_shape",
+    "address_quality",
+    "session_intent",
+    "geography_route"
+  ],
+  "train_summary": {
+    "name": "train",
+    "n_rows": 23058,
+    "n_positives": 3871,
+    "positive_rate": 0.16788099574984822,
+    "n_customers": 8774,
+    "first_day": 1,
+    "last_day": 126,
+    "first_ordered_at": "2025-09-01T00:57:24Z",
+    "last_ordered_at": "2026-01-04T23:22:48Z"
+  },
+  "validation_summary": {
+    "name": "validation",
+    "n_rows": 2034,
+    "n_positives": 388,
+    "positive_rate": 0.19075712881022616,
+    "n_customers": 1529,
+    "first_day": 127,
+    "last_day": 147,
+    "first_ordered_at": "2026-01-05T00:34:58Z",
+    "last_ordered_at": "2026-01-25T23:42:01Z"
+  },
+  "guardrails": {
+    "max_acceptable_flag_rate": 0.25,
+    "min_pr_auc_over_base_rate": 0.05
+  },
+  "notes": "Selected on validation. The test split was not read during selection, calibration or threshold derivation.",
+  "data_provenance": "Synthetic benchmark data. Labels are simulated outcomes of the documented process in docs/simulator.md, not real-world ground truth. Absolute metric values are not a claim about production performance."
+}

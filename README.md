@@ -32,12 +32,13 @@ evaluation report object, and on the console — not only here.
 
 ---
 
-## Current status: Phase 4 of 6
+## Current status: Phase 5 of 6
 
 **Phase 1** established the architecture, **Phase 2** built the data layer,
-**Phase 3** built the feature pipeline and the leakage defences, and **Phase 4**
-built and measured the baseline ladder. The following are implemented, tested,
-and working:
+**Phase 3** built the feature pipeline and the leakage defences, **Phase 4** built
+and measured the baseline ladder, and **Phase 5** produced the calibrated final
+model and evaluated it once on the sealed test set. The following are
+implemented, tested, and working:
 
 - A reproducible **benchmark generator** with a documented causal simulation
 - **PostgreSQL persistence**: 10 tables, Alembic migrations, bulk loader
@@ -52,26 +53,35 @@ and working:
   from Phase 3 — running against real generated data
 - **The complete baseline ladder**, rungs 0–4, trained and evaluated on identical
   footing at a cost-derived threshold
+- **A calibrated final model**: a capacity search over seven LightGBM
+  configurations selected by a one-standard-error rule, then a calibration method
+  chosen by cross-validation *inside* the validation split
+- **A frozen selection manifest** that the sealed-set command refuses to run
+  without, and a **single test-set evaluation** with a written unseal reason
+- **A generated model card** — [docs/model_card.md](docs/model_card.md) — whose
+  prose is reviewed configuration and whose every number is read from the
+  measured artefacts
 - **Experiment tracking**: six versions pinned per result, machine-readable
-  records, per-order scores, four plots, and a generated results document
+  records, per-order scores, plots, metrics JSON and comparison CSV
 - **Model artefacts**: joblib payload, provenance card, SHA-256 checksum verified
   before unpickling
 - A CLI covering generate / validate / migrate / seed / query / features / split /
-  train / evaluate
+  train / evaluate / final / final-test / final-report
 - Typed, validating configuration with a content fingerprint
 - FastAPI application with a working `/health` and `/readiness`
 - A React console that reads live backend status
 
-**No calibrated model exists yet, so no decision can be produced yet.** Every
-Phase 4 rung carries `calibration_method: null`, and the decision engine refuses
-an uncalibrated score by design. Calibration, the policy bands and the serving
-path are Phase 5. The dashboard and agent layer remain **scaffolded with fixed
-interfaces and not implemented**: their endpoints return `501 NOT_IMPLEMENTED`
-and their functions raise `NotImplementedError` naming the phase. Nothing returns
-placeholder data.
+**No decision layer exists yet.** The model produces a calibrated probability and
+stops there; the policy bands, the decision engine and the serving path are
+Phase 6, as are the dashboard and the agent layer. Those remain **scaffolded with
+fixed interfaces and not implemented**: their endpoints return
+`501 NOT_IMPLEMENTED` and their functions raise `NotImplementedError` naming the
+phase. Nothing returns placeholder data. **The cohort and fairness audit has not
+been run**, so no fairness claim about this model should be made.
 
 Full breakdown: [ARCHITECTURE.md § Implementation status](ARCHITECTURE.md#8-implementation-status).
-Measured results: [docs/ladder_results.md](docs/ladder_results.md).
+Measured results: [docs/ladder_results.md](docs/ladder_results.md) and
+[docs/model_card.md](docs/model_card.md).
 
 ---
 
@@ -151,6 +161,32 @@ written by hand.
 
 The test split stays sealed. `--split test` unseals it and asks for a written
 reason; it is meant to be used once, at the end.
+
+### Build the final model, then open the sealed set
+
+```bash
+rto-sentinel final --seed 7 --customers 20000 --orders 60000
+```
+
+That searches the hyperparameter candidates on validation, chooses a calibration
+method by cross-validation inside validation, derives the operating threshold from
+merchant economics, checks the guardrails, and **freezes a selection manifest**. It
+does not read the test split and cannot: reaching it raises.
+
+```bash
+rto-sentinel final-test --seed 7 --customers 20000 --orders 60000 --unseal-reason "why you are opening it"
+```
+
+That is the single sealed-set evaluation. It refuses to run without a frozen
+manifest, refuses to run twice without `--again`, requires the written reason, and
+loads the frozen artefact rather than retraining.
+
+```bash
+rto-sentinel final-report
+```
+
+Re-renders the model card and the CSVs from saved artefacts. It reads no split, so
+improving how a result is presented never requires re-measuring it.
 
 ### Run the API
 
@@ -347,6 +383,36 @@ flags 4.8% of orders at 26.5% precision, which is barely above the 19.1% base
 rate, and the friction costs more than the prevented RTOs save. A baseline that
 loses money is a useful result, and it is reported rather than dropped.
 
+### What the sealed test set showed
+
+Full detail: [docs/model_card.md](docs/model_card.md). The headline is not a
+flattering one, and it is stated as measured:
+
+**On the sealed set, no saving can be claimed at 95% confidence.** The final model
+nets ₹716 per 1,000 orders with an interval of [−₹1,009, ₹2,603] — the interval
+crosses zero, so 1,698 held-out orders cannot distinguish this model from doing
+nothing. The validation figure was ₹5,169, and the gap between the two is what
+selecting on validation costs.
+
+**Shrinking the model fixed the overfitting.** The capacity search moved the
+train-minus-validation PR-AUC gap from **+0.519** for the Phase 4 configuration to
+**+0.012** for the selected one, and validation PR-AUC rose from 0.443 to 0.484.
+The winner is the smallest candidate in the search — 120 trees of 7 leaves — which
+is further evidence that this benchmark's signal is close to linear.
+
+**Calibration helped on validation and did not transfer.** Platt scaling cut
+out-of-fold ECE from 0.0285 to 0.0122 on validation; on the sealed set it moved
+ECE from 0.0175 raw to 0.0290 calibrated, with the Brier score agreeing in
+direction. Both errors are small and the reliability curves sit close together, so
+this is a failure to help rather than a collapse — but it is the
+distribution-shift limitation measured rather than predicted, and the argument for
+recalibrating on recent matured outcomes rather than shipping a mapping fitted
+once.
+
+**Recall at 80% precision is undefined on the sealed set.** The model never reaches
+80% precision at any threshold there — precision peaks around 0.56 — so the metric
+is reported as undefined rather than as zero.
+
 ---
 
 ## Fairness
@@ -410,6 +476,7 @@ a key must be present.
 | [docs/features.md](docs/features.md) | Every feature, its lookback, and why it is available at scoring time |
 | [docs/splitting.md](docs/splitting.md) | The split protocol, and why random splitting would be dangerous |
 | [docs/ladder_results.md](docs/ladder_results.md) | **Measured baseline-ladder results.** Generated, never hand-written |
+| [docs/model_card.md](docs/model_card.md) | **The final model's card.** Intended use, limitations, fairness, drift, and every measured number |
 | [REPORT.md](REPORT.md) | Final report — written once the system is complete |
 | [docs/sources.md](docs/sources.md) | Every market figure, with its citation |
 | [docs/adr/](docs/adr/) | Architecture decision records |

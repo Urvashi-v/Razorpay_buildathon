@@ -399,6 +399,141 @@ class LadderConfig(_Frozen):
 
 
 # ---------------------------------------------------------------------------
+# config/models/final.yaml
+# ---------------------------------------------------------------------------
+
+
+class SearchCandidate(_Frozen):
+    """One hyperparameter configuration, named so results can refer to it."""
+
+    name: str
+    note: str = ""
+    params: dict[str, object] = Field(default_factory=dict)
+
+
+class SearchConfig(_Frozen):
+    metric: str
+    candidates: list[SearchCandidate]
+    bootstrap_iterations: int = Field(default=200, ge=0)
+    tie_rule: Literal["best_point_estimate", "one_standard_error_then_smallest"] = (
+        "one_standard_error_then_smallest"
+    )
+
+    @model_validator(mode="after")
+    def _candidates_are_distinct(self) -> SearchConfig:
+        names = [candidate.name for candidate in self.candidates]
+        if len(set(names)) != len(names):
+            msg = f"search candidate names must be unique, got {names}"
+            raise ValueError(msg)
+        if not names:
+            msg = "the search needs at least one candidate"
+            raise ValueError(msg)
+        return self
+
+
+class CalibrationSelectionConfig(_Frozen):
+    candidates: list[str]
+    n_folds: int = Field(ge=2, le=20)
+    fitted_on: str
+    metric: str
+    tiebreaker: str
+    minimum_improvement: float = Field(ge=0.0)
+    max_brier_degradation: float = Field(default=0.0, ge=0.0)
+
+    @model_validator(mode="after")
+    def _never_fitted_on_test(self) -> CalibrationSelectionConfig:
+        """The one rule in this file that is a safety property rather than a choice."""
+        if self.fitted_on != "validation":
+            msg = (
+                f"calibration must be fitted on validation, not {self.fitted_on!r}. "
+                "Train calibrates the model to its own overfitting; test destroys the seal."
+            )
+            raise ValueError(msg)
+        if "none" not in self.candidates:
+            msg = (
+                "'none' must remain a calibration candidate. Without it there is no "
+                "measurement of whether calibrating helped at all."
+            )
+            raise ValueError(msg)
+        return self
+
+
+class FinalGuardrails(_Frozen):
+    max_acceptable_flag_rate: float = Field(gt=0.0, le=1.0)
+    min_pr_auc_over_base_rate: float = Field(ge=0.0)
+
+
+class FinalModelConfig(_Frozen):
+    version: int
+    base_rung: str
+    search: SearchConfig
+    calibration: CalibrationSelectionConfig
+    guardrails: FinalGuardrails
+
+
+# ---------------------------------------------------------------------------
+# config/models/model_card.yaml
+# ---------------------------------------------------------------------------
+
+
+class TrainingDataProse(_Frozen):
+    description: str
+    synthetic_disclaimer: str
+    what_is_not_in_it: list[str]
+
+
+class FeatureProse(_Frozen):
+    description: str
+    excluded_deliberately: list[str]
+
+
+class MaintenanceProse(_Frozen):
+    retraining_trigger: str
+    monitoring: str
+
+
+class ModelCardConfig(_Frozen):
+    """The judgement half of the model card. Never the measured half.
+
+    Every field here is prose someone has to stand behind. The metrics are read
+    from the evaluation artefacts at render time, so this file cannot make a
+    quantitative claim at all - which is the property that keeps a card from
+    drifting away from the run that produced it.
+    """
+
+    version: int
+    model_name: str
+    owner: str
+    summary: str
+    intended_use: list[str]
+    non_intended_use: list[str]
+    training_data: TrainingDataProse
+    features: FeatureProse
+    known_limitations: list[str]
+    evaluation_methodology: str
+    calibration_methodology: str
+    fairness_limitations: list[str]
+    distribution_shift_limitations: list[str]
+    maintenance: MaintenanceProse
+
+    @model_validator(mode="after")
+    def _the_disclaimer_cannot_be_softened(self) -> ModelCardConfig:
+        """The synthetic-data disclaimer is not an editable pleasantry."""
+        required = ("simulated", "not")
+        lowered = self.training_data.synthetic_disclaimer.lower()
+        if not all(word in lowered for word in required):
+            msg = (
+                "the synthetic-data disclaimer must state plainly that the labels are "
+                "simulated and are not real-world ground truth"
+            )
+            raise ValueError(msg)
+        if not self.non_intended_use:
+            msg = "a model card without a non-intended-use section is an advertisement"
+            raise ValueError(msg)
+        return self
+
+
+# ---------------------------------------------------------------------------
 # config/evaluation.yaml
 # ---------------------------------------------------------------------------
 

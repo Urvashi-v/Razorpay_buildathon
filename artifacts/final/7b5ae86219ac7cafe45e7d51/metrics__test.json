@@ -1,0 +1,233 @@
+{
+  "manifest_id": "4f17cd1f1279d897d589",
+  "model_name": "lightgbm_platt",
+  "model_version": "a0d780424b79",
+  "evaluated_split": "test",
+  "is_calibrated": true,
+  "calibration_method": "platt",
+  "evaluated_at": "2026-08-29T02:18:18.826488Z",
+  "generator_version": "1.0.0",
+  "dataset_run_id": "7b5ae86219ac7cafe45e7d51",
+  "feature_version": "1.0.0",
+  "feature_fingerprint": "798aef57ad3cefe94cfeeb9555287fefda16e0c502f236f7e226590923531dfb",
+  "config_fingerprint": "f3943b6937cf0b36164e1fec043e25fc8c4eab1bc684887d778f14a268ebf251",
+  "seed": 7,
+  "ranking": {
+    "pr_auc": {
+      "value": 0.3645208578051644,
+      "ci_low": 0.31490718242883686,
+      "ci_high": 0.42628408266392454,
+      "confidence": 0.95,
+      "n_bootstrap": 500
+    },
+    "roc_auc": {
+      "value": 0.7808916495148485,
+      "ci_low": 0.7550641905821434,
+      "ci_high": 0.8072928123854354,
+      "confidence": 0.95,
+      "n_bootstrap": 500
+    },
+    "recall_at_precision_80": null,
+    "recall_at_precision_90": null,
+    "precision_at_k": {
+      "0.01": 0.5882352941176471,
+      "0.05": 0.5176470588235295,
+      "0.10": 0.4294117647058823
+    }
+  },
+  "calibration": {
+    "expected_calibration_error": 0.02899052768733644,
+    "brier_score": 0.11624952376734818,
+    "n_bins": 10,
+    "reliability_bins": [
+      [
+        0.03146821617361601,
+        0.02245508982035928,
+        668
+      ],
+      [
+        0.15090306359894592,
+        0.14960629921259844,
+        381
+      ],
+      [
+        0.24218645173686504,
+        0.2366412213740458,
+        262
+      ],
+      [
+        0.34451258552766134,
+        0.2789473684210526,
+        190
+      ],
+      [
+        0.4480094605581335,
+        0.2857142857142857,
+        105
+      ],
+      [
+        0.5394596593110255,
+        0.5918367346938775,
+        49
+      ],
+      [
+        0.6331007013576376,
+        0.4074074074074074,
+        27
+      ],
+      [
+        0.7450929838271843,
+        0.6923076923076923,
+        13
+      ],
+      [
+        0.8044803312785679,
+        0.0,
+        3
+      ]
+    ]
+  },
+  "uncalibrated_calibration": {
+    "expected_calibration_error": 0.017535495592247225,
+    "brier_score": 0.11519719781728614,
+    "n_bins": 10,
+    "reliability_bins": [
+      [
+        0.031242618784689796,
+        0.032388663967611336,
+        741
+      ],
+      [
+        0.14784371690553347,
+        0.17257683215130024,
+        423
+      ],
+      [
+        0.24831396688912963,
+        0.2510460251046025,
+        239
+      ],
+      [
+        0.3429945352275837,
+        0.2945205479452055,
+        146
+      ],
+      [
+        0.44520873198177496,
+        0.38823529411764707,
+        85
+      ],
+      [
+        0.5521331077261077,
+        0.5384615384615384,
+        39
+      ],
+      [
+        0.6449719668491268,
+        0.4166666666666667,
+        12
+      ],
+      [
+        0.7398602467267508,
+        0.5384615384615384,
+        13
+      ]
+    ]
+  },
+  "uncalibrated_pr_auc": 0.3645208578051644,
+  "threshold_metrics": [
+    {
+      "threshold": 0.34814814814814815,
+      "threshold_source": "cost-derived",
+      "true_positives": 100,
+      "false_positives": 170,
+      "false_negatives": 166,
+      "true_negatives": 1262,
+      "flag_rate": 0.15901060070671377,
+      "precision": 0.37037037037037035,
+      "recall": 0.37593984962406013,
+      "f1": 0.373134328358209
+    },
+    {
+      "threshold": 0.1,
+      "threshold_source": "sweep",
+      "true_positives": 251,
+      "false_positives": 779,
+      "false_negatives": 15,
+      "true_negatives": 653,
+      "flag_rate": 0.6065959952885748,
+      "precision": 0.2436893203883495,
+      "recall": 0.943609022556391,
+      "f1": 0.3873456790123457
+    },
+    {
+      "threshold": 0.2,
+      "threshold_source": "sweep",
+      "true_positives": 194,
+      "false_positives": 455,
+      "false_negatives": 72,
+      "true_negatives": 977,
+      "flag_rate": 0.3822143698468787,
+      "precision": 0.29892141756548535,
+      "recall": 0.7293233082706767,
+      "f1": 0.4240437158469946
+    },
+    {
+      "threshold": 0.3,
+      "threshold_source": "sweep",
+      "true_positives": 132,
+      "false_positives": 255,
+      "false_negatives": 134,
+      "true_negatives": 1177,
+      "flag_rate": 0.22791519434628976,
+      "precision": 0.34108527131782945,
+      "recall": 0.49624060150375937,
+      "f1": 0.40428790199081155
+    },
+    {
+      "threshold": 0.5,
+      "threshold_source": "sweep",
+      "true_positives": 49,
+      "false_positives": 43,
+      "false_negatives": 217,
+      "true_negatives": 1389,
+      "flag_rate": 0.05418138987043581,
+      "precision": 0.532608695652174,
+      "recall": 0.18421052631578946,
+      "f1": 0.2737430167597765
+    }
+  ],
+  "economics": {
+    "threshold": 0.34814814814814815,
+    "flag_rate": 0.15901060070671377,
+    "true_positives": 100,
+    "false_positives": 170,
+    "false_negatives": 166,
+    "true_negatives": 1262,
+    "gross_saving_inr": 13200.0,
+    "total_false_positive_cost_inr": 11985.0,
+    "residual_false_negative_loss_inr": 36520.0,
+    "net_inr_saved_per_1000_orders": {
+      "value": 715.547703180212,
+      "ci_low": -1009.05477031802,
+      "ci_high": 2603.423144876325,
+      "confidence": 0.95,
+      "n_bootstrap": 500
+    },
+    "baseline_net_inr_per_1000_orders": -34464.075382803305
+  },
+  "evaluation_summary": {
+    "name": "test",
+    "n_rows": 1698,
+    "n_positives": 266,
+    "positive_rate": 0.15665488810365136,
+    "n_customers": 1180,
+    "first_day": 148,
+    "last_day": 178,
+    "first_ordered_at": "2026-01-26T08:43:51Z",
+    "last_ordered_at": "2026-02-25T19:43:09Z"
+  },
+  "unseal_reason": "Phase 5 final evaluation. Model selection (candidate 'minimal'), calibration selection (Platt, cross-validated on validation) and threshold methodology (cost-derived, 0.3481) were frozen in manifest 4f17cd1f1279d897d589 before this command was run.",
+  "notes": "",
+  "data_provenance": "Synthetic benchmark data. Labels are simulated outcomes of the documented process in docs/simulator.md, not real-world ground truth. Absolute metric values are not a claim about production performance."
+}

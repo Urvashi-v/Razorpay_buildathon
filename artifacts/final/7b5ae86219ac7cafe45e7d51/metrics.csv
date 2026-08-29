@@ -1,0 +1,21 @@
+metric,validation,test
+Rows,"2,034","1,698"
+Positive rate,0.1908,0.1567
+PR-AUC,"0.484 [0.439, 0.536]","0.365 [0.315, 0.426]"
+"PR-AUC, uncalibrated",0.484,0.365
+ROC-AUC,"0.806 [0.785, 0.827]","0.781 [0.755, 0.807]"
+Recall @ precision 80%,0.036,—
+Recall @ precision 90%,0.010,—
+Brier score,0.1239,0.1162
+"Brier, uncalibrated",0.1247,0.1152
+Expected calibration error,0.0136,0.0290
+"ECE, uncalibrated",0.0285,0.0175
+Operating threshold,0.3481,0.3481
+Flag rate,0.191,0.159
+Precision,0.482,0.370
+Recall,0.482,0.376
+F1,0.482,0.373
+Confusion (TP / FP / FN / TN),"187 / 201 / 201 / 1,445","100 / 170 / 166 / 1,262"
+"Net INR saved per 1,000 orders","5,169 [3,279, 7,173]","716 [-1,009, 2,603]"
+"False-positive cost, INR","14,170","11,985"
+"Do-nothing loss absorbed, INR/1k","41,967","34,464"

@@ -20,8 +20,10 @@ from rto_sentinel.configuration.schemas import (
     CostModelConfig,
     EvaluationConfig,
     FeaturesConfig,
+    FinalModelConfig,
     GeneratorConfig,
     LadderConfig,
+    ModelCardConfig,
     PolicyConfig,
     SplitsConfig,
 )
@@ -37,6 +39,8 @@ CONFIG_FILES: dict[str, str] = {
     "cost_model": "cost_model.yaml",
     "policy": "policy.yaml",
     "ladder": "models/ladder.yaml",
+    "final_model": "models/final.yaml",
+    "model_card": "models/model_card.yaml",
     "evaluation": "evaluation.yaml",
 }
 
@@ -101,6 +105,16 @@ def load_policy_config(settings: Settings | None = None) -> PolicyConfig:
 def load_ladder_config(settings: Settings | None = None) -> LadderConfig:
     path = config_dir(settings) / CONFIG_FILES["ladder"]
     return _parse(LadderConfig, _read_yaml(path), path)
+
+
+def load_final_model_config(settings: Settings | None = None) -> FinalModelConfig:
+    path = config_dir(settings) / CONFIG_FILES["final_model"]
+    return _parse(FinalModelConfig, _read_yaml(path), path)
+
+
+def load_model_card_config(settings: Settings | None = None) -> ModelCardConfig:
+    path = config_dir(settings) / CONFIG_FILES["model_card"]
+    return _parse(ModelCardConfig, _read_yaml(path), path)
 
 
 def load_evaluation_config(settings: Settings | None = None) -> EvaluationConfig:
