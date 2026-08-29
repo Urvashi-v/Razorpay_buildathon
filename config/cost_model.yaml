@@ -34,7 +34,7 @@ profiles:
     friction_support_cost_inr: 8.0      # per-friction ops and messaging cost
 
   thin_margin_reseller:
-    label: "Thin-margin reseller - should flag less"
+    label: "Thin-margin reseller - flags MORE (friction is cheap here)"
     rto_cost_inr: 180.0
     contribution_margin_inr: 90.0
     abandonment_on_friction: 0.30
@@ -42,7 +42,7 @@ profiles:
     friction_support_cost_inr: 8.0
 
   high_margin_beauty:
-    label: "High-margin beauty brand - should flag more"
+    label: "High-margin beauty brand - flags LESS (a lost order costs more)"
     rto_cost_inr: 240.0
     contribution_margin_inr: 520.0
     abandonment_on_friction: 0.18

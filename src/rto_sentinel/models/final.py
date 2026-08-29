@@ -586,3 +586,59 @@ def load_evaluation(artifact_root: Path, dataset_run_id: str, split: str) -> Fin
         msg = f"no {split} evaluation at {path}"
         raise FileNotFoundError(msg)
     return FinalEvaluation.model_validate_json(path.read_text(encoding="utf-8"))
+
+
+@dataclass(frozen=True, slots=True)
+class ScoredBook:
+    """A book of calibrated scores, ready to be priced by the decision layer.
+
+    Loaded from the per-order scores the Phase 5 evaluation wrote. Carrying the
+    split name rather than assuming it is what lets the decision layer refuse to
+    simulate against the sealed set: the refusal is a property of the data, not
+    of whoever remembered to pass the right flag.
+    """
+
+    probabilities: np.ndarray
+    labels: np.ndarray | None
+    split: str
+    dataset_run_id: str
+    model_version: str
+    n_orders: int
+
+
+def load_scored_book(
+    artifact_root: Path, *, split: str = "validation", dataset_run_id: str | None = None
+) -> ScoredBook:
+    """Read the calibrated scores the final-model evaluation wrote.
+
+    Raises ``FileNotFoundError`` when no such book exists. The API turns that
+    into an explicit "no model loaded" response rather than inventing scores -
+    a system that cannot score says so.
+    """
+    root = artifact_root / FINAL_DIR
+    if dataset_run_id is None:
+        runs = sorted(root.glob("*/selection_manifest.json")) if root.is_dir() else []
+        if not runs:
+            msg = (
+                f"no final-model run under {root}. Run `rto-sentinel final` to produce a "
+                "calibrated model and its scored book."
+            )
+            raise FileNotFoundError(msg)
+        dataset_run_id = max(runs, key=lambda path: path.stat().st_mtime).parent.name
+
+    path = final_dir(artifact_root, dataset_run_id) / f"scores__{split}.parquet"
+    if not path.is_file():
+        msg = f"no scored book for split {split!r} at {path}"
+        raise FileNotFoundError(msg)
+
+    frame = pd.read_parquet(path)
+    manifest = load_manifest(artifact_root, dataset_run_id)
+    labels = frame["label"].to_numpy(dtype=bool) if "label" in frame.columns else None
+    return ScoredBook(
+        probabilities=frame["score_calibrated"].to_numpy(dtype="float64"),
+        labels=labels,
+        split=split,
+        dataset_run_id=dataset_run_id,
+        model_version=manifest.model_version,
+        n_orders=len(frame),
+    )

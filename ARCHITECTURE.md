@@ -251,6 +251,13 @@ refuses a single-call `fit` for the same reason.
 
 ### 3.6 Decision engine (`decision/`) — the authority
 
+Six modules: `cost_model` (rupee arithmetic), `threshold` (the derivation),
+`policy` (the friction ladder), `reason_codes` (stable identifiers from SHAP),
+`engine` (one order), `portfolio` (a whole book), `threshold_analysis` (the
+sweep) and `simulation` (merchant what-ifs). Nothing here imports an LLM SDK,
+the API, or the agent layer.
+
+
 Inputs: a **calibrated** `RiskScore` and a `CostInputs`. Nothing else.
 
 Given those, the output is a pure function. Same inputs, same `Decision`, every
@@ -268,7 +275,23 @@ asserted in `test_merchant_economics_move_the_threshold`.
 
 Band cut points are *multipliers on the derived threshold*, so the whole ladder
 slides when the merchant's economics change. No absolute probability is hardcoded
-anywhere in the policy.
+anywhere in the policy. A band whose span collapses at a given threshold — a
+thin-margin merchant leaves no room above 1.0 for three more rungs — is dropped
+and **reported**, so a merchant is told "your economics leave no SEVERE tier"
+rather than shown an empty one.
+
+Boundaries are half-open `[lower, upper)`, so a probability exactly on a cut
+point lands in the higher band and the flag rule is `p >= threshold` — matching
+`confusion_at_threshold` in the evaluation harness. Two components disagreeing
+about that one boundary would make the served flag rate differ from the measured
+one, silently, for exactly the orders sitting on the line.
+
+**The direction of the margin response is counter-intuitive, and this repository
+had it backwards until Phase 6.** A *higher* contribution margin *raises* the
+threshold, so a high-margin brand flags **less**. The margin is what a false
+positive costs; a merchant with more to lose demands more certainty. The
+merchant simulator made the contradiction visible and it is now asserted in
+`test_a_higher_margin_raises_the_threshold`.
 
 Failure posture: if the model artefact is missing, the engine raises. It does not
 fall back to a default probability and does not pass an uncalibrated score
@@ -513,10 +536,16 @@ reviewer to verify that in a minute.
 | Frozen selection manifest and sealed-set gating | **Implemented and tested** |
 | Final-model evaluation, metrics JSON/CSV, plots | **Implemented and exercised** |
 | Generated model card | **Implemented and tested** |
-| Policy bands and decision engine | Interfaces fixed — Phase 6 |
-| Serving-path repositories (single order, decisions) | Interfaces fixed — Phase 6 |
-| Console: queue, sliders, charts, fairness | Phase 6 |
-| Fairness audit by cohort | Contract fixed — Phase 6 |
+| Policy bands, friction ladder, decision engine | **Implemented and tested** |
+| Reason codes from SHAP attributions | **Implemented and tested** |
+| Portfolio economics (expected and realized) | **Implemented and tested** |
+| Threshold sweep with stated selection methodology | **Implemented and tested** |
+| Merchant simulation service and its API | **Implemented and tested** |
+| Provenance taxonomy on every reported quantity | **Implemented and tested** |
+| Generated economic evaluation report | **Implemented and exercised** |
+| Serving-path repositories (single order, decisions) | Interfaces fixed — later |
+| Console: queue, sliders, charts, fairness | Later |
+| Fairness audit by cohort | Contract fixed — not run |
 | Agent layer (4 jobs + grounding) | Interfaces fixed — Phase 6 |
 | Cohort/fairness audit execution | **Not run.** No fairness claim may be made until it is |
 | Drift monitoring, outcome loop | Interfaces fixed — Phase 6 |
@@ -549,6 +578,25 @@ cold-start customers in validation and test. Measured, not assumed: 43% versus
 
 **501 rather than stubbed responses.** Discussed in §3.10. This is the decision
 most likely to make an early demo look worse and the project look honest.
+
+**Provenance travels with the number, not in a footnote.** An economic report
+mixes measured metrics, merchant inputs, published figures, simulator parameters
+and derived arithmetic, and on a dashboard they look identical. `Quantity` cannot
+be constructed without a `Provenance`, and `ASSUMED_INTERVENTION` is its own
+category — separate from `PUBLISHED` — because intervention effectiveness is the
+number the rupee figures are most sensitive to and the one nobody here has
+measured. See `contracts/provenance.py`.
+
+**Expected economics need no labels; realized ones need them; both are reported.**
+A calibrated probability *is* an expectation, so a merchant can price today's
+unlabelled order book. That is entirely contingent on the calibration being good,
+so where labels exist the realized figures are computed alongside and the gap
+between them is reported as a calibration check.
+
+**The graduated ladder is priced, not assumed to be worth it.** Under the
+multipliers this project ships with, applying one action uniformly above the
+threshold beats the ladder — see §9 and `docs/economics.md`. That result is
+computed by `compare_ladder_against_uniform` and reported rather than buried.
 
 **The ladder is ranked on net rupees, not PR-AUC.** `evaluation.yaml` declares
 `net_inr_saved_per_1000_orders` as the primary metric and the schema refuses to

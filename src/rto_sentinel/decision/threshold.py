@@ -14,8 +14,14 @@ TWO THINGS THIS MODULE MUST NEVER DO, BOTH ENFORCED BY TESTS
 ============================================================
 **Never return a constant.** A hardcoded 0.5 is the failure this project exists
 to correct. The threshold is a function of merchant economics and moves when they
-move - a high-margin brand should flag more readily than a thin-margin reseller,
-and the console demonstrates that live.
+move, and the console demonstrates that live.
+
+The direction is worth stating because the intuitive answer is wrong. A HIGHER
+contribution margin RAISES the threshold, so a high-margin brand flags LESS
+readily than a thin-margin reseller. The margin is what a false positive costs -
+the margin forgone when a good customer walks away - so a merchant with more to
+lose demands more certainty before applying friction. "They can afford it" is not
+the criterion; the expected-value trade-off is.
 
 **Never see labels.** Threshold derivation takes cost inputs and nothing else. It
 does not look at the validation set, let alone the test set. The operating point

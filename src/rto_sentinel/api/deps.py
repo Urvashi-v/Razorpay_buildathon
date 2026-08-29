@@ -15,13 +15,15 @@ from __future__ import annotations
 from collections.abc import Iterator
 from typing import Annotated
 
-from fastapi import Depends
+from fastapi import Depends, status
 from sqlalchemy.orm import Session
 
 from rto_sentinel.agents.provider import LLMProvider, get_provider
+from rto_sentinel.api.errors import ApiError, ErrorCode
 from rto_sentinel.configuration import AppConfig, load_app_config
 from rto_sentinel.db.session import get_session_factory
 from rto_sentinel.decision.engine import DecisionEngine
+from rto_sentinel.models.final import ScoredBook, load_scored_book
 from rto_sentinel.settings import Settings, get_settings
 
 
@@ -72,6 +74,31 @@ def decision_engine_dep(config: AppConfigDep) -> DecisionEngine:
 
 
 DecisionEngineDep = Annotated[DecisionEngine, Depends(decision_engine_dep)]
+
+
+def scored_book_dep(settings: SettingsDep) -> ScoredBook:
+    """The calibrated validation book the economics endpoints price.
+
+    VALIDATION, ALWAYS. There is no parameter through which a caller can request
+    the sealed test split, which is the only reliable way to keep a slider from
+    consuming it: a flag that defaults to safe still has an unsafe value.
+
+    When no final model has been trained, this raises a 503 naming the command to
+    run. It does not return an empty book or synthesised scores - an economics
+    endpoint answering from nothing would produce rupee figures for a model that
+    does not exist.
+    """
+    try:
+        return load_scored_book(settings.artifact_path, split="validation")
+    except FileNotFoundError as error:
+        raise ApiError(
+            ErrorCode.MODEL_UNAVAILABLE,
+            str(error),
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        ) from error
+
+
+ScoredBookDep = Annotated[ScoredBook, Depends(scored_book_dep)]
 
 
 def llm_provider_dep(settings: SettingsDep) -> LLMProvider:

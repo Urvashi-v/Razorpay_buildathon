@@ -85,6 +85,24 @@ BandName = Literal["LOW", "ELEVATED", "HIGH", "SEVERE"]
 ActionName = Literal["none", "prepaid_nudge", "confirmation_required", "prepaid_only"]
 
 
+class BandEconomics(_Frozen):
+    """How effective, and how costly, one rung's action is ASSUMED to be.
+
+    Multipliers on the merchant's own rates rather than absolutes, so the ladder
+    keeps its shape when a merchant changes their economics and there is one
+    place - :class:`CostInputs` - where the scale lives.
+
+    Every field here is an assumption. See the header of ``config/policy.yaml``
+    and :class:`~rto_sentinel.contracts.provenance.Provenance` for why they are
+    tagged ``assumed_intervention`` wherever they reach a report.
+    """
+
+    intervention_success_multiplier: float = Field(ge=0.0, le=5.0)
+    abandonment_multiplier: float = Field(ge=0.0, le=5.0)
+    support_cost_inr: float = Field(ge=0.0)
+    rationale: str
+
+
 class PolicyBand(_Frozen):
     """One rung of the friction ladder.
 
@@ -103,6 +121,7 @@ class PolicyBand(_Frozen):
     requires_human_review_queue: bool = False
     channels: list[str] = Field(default_factory=list)
     description: str
+    economics: BandEconomics
 
 
 class PolicySafeguards(_Frozen):

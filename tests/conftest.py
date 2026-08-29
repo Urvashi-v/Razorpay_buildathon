@@ -32,6 +32,7 @@ from rto_sentinel.configuration import (
     load_generator_config,
     load_ladder_config,
     load_model_card_config,
+    load_policy_config,
     load_splits_config,
 )
 from rto_sentinel.configuration.schemas import (
@@ -42,6 +43,7 @@ from rto_sentinel.configuration.schemas import (
     GeneratorConfig,
     LadderConfig,
     ModelCardConfig,
+    PolicyConfig,
     SplitsConfig,
 )
 from rto_sentinel.data import schema as cols
@@ -209,6 +211,11 @@ def final_config() -> FinalModelConfig:
 @pytest.fixture(scope="session")
 def model_card_config() -> ModelCardConfig:
     return load_model_card_config(Settings(RTO_CONFIG_DIR=str(REPO_ROOT / "config")))
+
+
+@pytest.fixture(scope="session")
+def policy_config() -> PolicyConfig:
+    return load_policy_config(Settings(RTO_CONFIG_DIR=str(REPO_ROOT / "config")))
 
 
 @pytest.fixture(scope="session")

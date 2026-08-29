@@ -20,31 +20,74 @@ class CostInputs(BaseModel):
     """The four merchant-specific rupee inputs, plus the friction support cost.
 
     These are inputs, not truths. The console exposes them as sliders precisely
-    because a high-margin brand should flag more aggressively than a thin-margin
-    reseller, and the demo makes that visible.
+    because the operating point moves with them: a thin-margin reseller flags
+    MORE readily than a high-margin brand, because losing a good order costs them
+    less. That direction follows from the formula and is asserted in
+    ``test_merchant_economics_move_the_threshold``; it is the opposite of the
+    intuition that a high-margin brand can "afford" more friction, and the
+    arithmetic is what settles it.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    rto_cost_inr: float = Field(gt=0, description="Full cost of one RTO")
-    contribution_margin_inr: float = Field(gt=0, description="Margin lost if a good order lapses")
+    # WHY THESE TWO ARE NOT `gt=0`
+    # ============================
+    # Zero is economically meaningful for both and the arithmetic handles it:
+    #
+    # * ``rto_cost_inr = 0`` - returns cost nothing, so S_tp is zero and the
+    #   derived threshold is 1.0: flag nothing. That is the correct answer, not
+    #   an error, and refusing it would hide it.
+    # * ``contribution_margin_inr = 0`` - a loss-leader or a break-even SKU. C_fp
+    #   collapses to the friction support cost alone, which is right: there is no
+    #   margin to lose when a good customer walks away.
+    #
+    # Negatives are refused in the validator below, with a message that says why
+    # rather than a generic bounds error.
+    rto_cost_inr: float = Field(description="Full cost of one RTO. Zero means returns are free.")
+    contribution_margin_inr: float = Field(
+        description="Margin lost if a good order lapses. Zero means a break-even order."
+    )
     abandonment_on_friction: float = Field(
         ge=0.0, le=1.0, description="P(good customer abandons | frictioned)"
     )
     intervention_success_rate: float = Field(
-        ge=0.0, le=1.0, description="P(risky order saved | frictioned)"
+        ge=0.0, le=1.0, description="P(risky order saved | frictioned). ASSUMED, never measured."
     )
     friction_support_cost_inr: float = Field(default=0.0, ge=0.0)
 
     @model_validator(mode="after")
-    def _threshold_is_derivable(self) -> CostInputs:
-        """Reject inputs from which no finite threshold can be derived.
+    def _economics_are_coherent(self) -> CostInputs:
+        """Refuse inputs that make the expected-value rule meaningless.
 
-        If frictioning a bad order saves nothing *and* frictioning a good one
-        costs nothing, the expected-value rule is undefined. Refusing here is
-        better than silently returning 0.5, which is the exact failure mode this
-        project exists to avoid.
+        Three separate refusals, each with its own reason:
+
+        1. **Negative rupee amounts.** A negative RTO cost says returns are
+           profitable; a negative contribution margin says a good customer
+           walking away *earns* money. Either inverts the sign of the whole
+           decision rule, so the engine would confidently recommend the opposite
+           of what it should. Refused rather than clamped: a merchant who really
+           sells below cost needs a different model, not a silently corrected
+           input.
+        2. **No cost and no benefit.** If frictioning a bad order saves nothing
+           and frictioning a good one costs nothing, no threshold exists.
+           Returning 0.5 here would be the exact failure this project exists to
+           correct.
         """
+        negatives = {
+            "rto_cost_inr": self.rto_cost_inr,
+            "contribution_margin_inr": self.contribution_margin_inr,
+        }
+        for field, value in negatives.items():
+            if value < 0:
+                msg = (
+                    f"{field} is negative ({value}). A negative RTO cost means returns are "
+                    "profitable and a negative contribution margin means losing a good "
+                    "customer earns money; either inverts the decision rule, so the engine "
+                    "would recommend the opposite of the right action. Refused rather than "
+                    "clamped."
+                )
+                raise ValueError(msg)
+
         cost_fp = self.abandonment_on_friction * self.contribution_margin_inr
         saving_tp = self.intervention_success_rate * self.rto_cost_inr
         if cost_fp + saving_tp + self.friction_support_cost_inr <= 0:
@@ -117,6 +160,11 @@ class Decision(BaseModel):
         default=False,
         description="Randomised no-friction slice retained to keep precision measurable",
     )
+    #: A holdout order is exempt from the SEVERE human-review rule. Routing it to
+    #: a queue would let an operator act on it, destroying exactly the
+    #: counterfactual the slice exists to preserve. The exemption is narrow: it
+    #: applies only when `is_control_holdout` is True, and such a decision may
+    #: not be flagged at all.
 
     @model_validator(mode="after")
     def _safeguards_hold(self) -> Decision:
@@ -133,8 +181,19 @@ class Decision(BaseModel):
         if not self.appeal_available:
             msg = "no decision may remove the appeal path"
             raise ValueError(msg)
-        if self.band is RiskBand.SEVERE and not self.human_review_required:
+        if (
+            self.band is RiskBand.SEVERE
+            and not self.human_review_required
+            and not self.is_control_holdout
+        ):
             msg = "SEVERE decisions must route to a human review queue"
+            raise ValueError(msg)
+        if self.is_control_holdout and self.flagged:
+            msg = (
+                "a control-holdout order receives no friction, so it cannot be flagged. "
+                "The band is still recorded - that is the whole point of the slice - but "
+                "the action is not taken."
+            )
             raise ValueError(msg)
         return self
 

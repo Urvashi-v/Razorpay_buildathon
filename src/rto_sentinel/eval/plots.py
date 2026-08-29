@@ -53,8 +53,10 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
     import pandas as pd
 
     from rto_sentinel.contracts.decision import CostInputs
+    from rto_sentinel.contracts.economics import PortfolioEconomics, ThresholdSweep
     from rto_sentinel.contracts.experiment import LadderResults
     from rto_sentinel.contracts.final import FinalEvaluation
+    from rto_sentinel.decision.simulation import SimulationResult
 
 FIGSIZE = (9.0, 6.0)
 DPI = 130
@@ -445,3 +447,157 @@ def generate_final_plots(
             pr_auc_value=evaluation.ranking.pr_auc.value,
         ),
     ]
+
+
+# ---------------------------------------------------------------------------
+# Phase 6: the economics of the decision policy
+# ---------------------------------------------------------------------------
+
+
+def plot_threshold_economics(sweep: ThresholdSweep, path: Path) -> Path:
+    """Net rupees and expected cost across the threshold range.
+
+    The derived operating point and the curve's peak are marked separately and
+    deliberately. Showing only the peak would invite the reader to conclude the
+    threshold should move there; showing both makes the distinction between "what
+    the labels would pick" and "what the merchant's economics pick" visible.
+    """
+    thresholds = [point.threshold for point in sweep.points]
+    expected = [point.expected_net_inr_per_1000_orders for point in sweep.points]
+    realized = [
+        point.realized_net_inr_per_1000_orders
+        for point in sweep.points
+        if point.realized_net_inr_per_1000_orders is not None
+    ]
+
+    figure, axes = plt.subplots(figsize=FIGSIZE, dpi=DPI)
+    axes.plot(thresholds, expected, linewidth=1.8, label="expected (from probabilities)")
+    if len(realized) == len(thresholds):
+        axes.plot(
+            thresholds, realized, linewidth=1.8, linestyle="--", label="realized (from labels)"
+        )
+    axes.axhline(0.0, color="grey", linewidth=1.0)
+    axes.axvline(
+        sweep.derived_threshold,
+        color="black",
+        linestyle="--",
+        linewidth=1.4,
+        label=f"derived operating point ({sweep.derived_threshold:.3f})",
+    )
+    axes.axvline(
+        sweep.best_net_threshold,
+        color="tab:red",
+        linestyle=":",
+        linewidth=1.4,
+        label=f"curve peak ({sweep.best_net_threshold:.3f}) - NOT selected",
+    )
+    axes.set_xlabel("Decision threshold (calibrated probability)")
+    axes.set_ylabel("Net INR saved per 1,000 orders")
+    axes.set_title(
+        "Net rupees across the threshold range\n"
+        "The operating point is derived from economics, not read off this curve"
+    )
+    axes.set_xlim(0.0, 1.0)
+    axes.legend(loc="upper right", fontsize=8)
+    axes.grid(alpha=0.25)
+    figure.tight_layout()
+    figure.savefig(path)
+    plt.close(figure)
+    return path
+
+
+def plot_band_economics(economics: PortfolioEconomics, path: Path) -> Path:
+    """Savings, false-positive cost and net, per rung of the ladder.
+
+    Volume is annotated on each bar because a rung's rupee contribution is mostly
+    a story about how many orders land in it.
+    """
+    bands = [band for band in economics.bands if band.applies_friction]
+    if not bands:
+        bands = list(economics.bands)
+
+    labels = [band.band.value for band in bands]
+    positions = np.arange(len(labels))
+    width = 0.27
+
+    figure, axes = plt.subplots(figsize=FIGSIZE, dpi=DPI)
+    axes.bar(
+        positions - width,
+        [band.expected_saving_inr for band in bands],
+        width,
+        label="expected saving",
+        color="tab:green",
+    )
+    axes.bar(
+        positions,
+        [-band.expected_false_positive_cost_inr for band in bands],
+        width,
+        label="false-positive cost",
+        color="tab:red",
+    )
+    axes.bar(
+        positions + width,
+        [band.expected_net_inr for band in bands],
+        width,
+        label="net",
+        color="tab:blue",
+    )
+    for index, band in enumerate(bands):
+        axes.annotate(
+            f"{band.n_orders:,} orders\n{band.share_of_book:.1%}",
+            (index, 0),
+            textcoords="offset points",
+            xytext=(0, 6),
+            ha="center",
+            fontsize=7,
+        )
+
+    axes.axhline(0.0, color="black", linewidth=1.0)
+    axes.set_xticks(positions)
+    axes.set_xticklabels(
+        [f"{label}\n{band.action.value}" for label, band in zip(labels, bands, strict=True)]
+    )
+    axes.set_ylabel("INR")
+    axes.set_title(
+        "Where the money comes from, rung by rung\n"
+        "Every saving here rests on an ASSUMED intervention success rate"
+    )
+    axes.legend(loc="upper left", fontsize=8)
+    axes.grid(alpha=0.25, axis="y")
+    figure.tight_layout()
+    figure.savefig(path)
+    plt.close(figure)
+    return path
+
+
+def plot_margin_response(sweep: list[tuple[float, SimulationResult]], path: Path) -> Path:
+    """Threshold and flag rate against contribution margin, one input at a time.
+
+    A CONTROLLED sweep, deliberately. An earlier version of this figure plotted
+    the three configured cost profiles against each other, which looked like the
+    same chart and was not: those profiles differ in RTO cost and abandonment as
+    well as margin, so the line through them confounded three effects and did not
+    come out monotone. Here every point shares one set of economics with the
+    margin alone varied, which is the only way the curve can be read as showing
+    what the title claims.
+    """
+    margins = [margin for margin, _ in sweep]
+    thresholds = [result.threshold.threshold for _, result in sweep]
+    flag_rates = [result.economics.flag_rate for _, result in sweep]
+
+    figure, axes = plt.subplots(figsize=FIGSIZE, dpi=DPI)
+    axes.plot(margins, thresholds, marker="o", linewidth=1.8, label="derived threshold")
+    axes.plot(margins, flag_rates, marker="s", linewidth=1.8, linestyle="--", label="flag rate")
+    axes.set_xlabel("Contribution margin (INR), all other inputs held fixed")
+    axes.set_ylabel("Probability")
+    axes.set_title(
+        "The threshold is not a constant\n"
+        "A higher margin makes a lost order costlier, so the bar rises"
+    )
+    axes.set_ylim(0.0, 1.0)
+    axes.legend(loc="upper left", fontsize=8)
+    axes.grid(alpha=0.25)
+    figure.tight_layout()
+    figure.savefig(path)
+    plt.close(figure)
+    return path

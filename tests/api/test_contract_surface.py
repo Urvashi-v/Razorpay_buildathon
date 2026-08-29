@@ -29,6 +29,8 @@ EXPECTED_PATHS = {
     "/v1/economics/profiles",
     "/v1/economics/threshold",
     "/v1/economics/what-if",
+    "/v1/economics/simulate",
+    "/v1/economics/sweep",
     "/v1/decisions/queue",
     "/v1/decisions/{order_id}",
     "/v1/decisions/override",
@@ -68,7 +70,26 @@ def test_openapi_states_the_data_provenance(client: TestClient) -> None:
 
 
 def test_unimplemented_endpoints_return_an_explicit_501(client: TestClient) -> None:
-    """No plausible-looking placeholder data anywhere in the API."""
+    """No plausible-looking placeholder data anywhere in the API.
+
+    The economics endpoints were the subject of this test until Phase 6
+    implemented them; the decision queue took their place rather than the
+    assertion being dropped. As each surface lands it moves out of this test and
+    into one that checks what it actually returns - the invariant being defended
+    is that nothing in between ever returns a plausible fake.
+    """
+    response = client.get("/v1/decisions/queue", params={"merchant_id": "M-1"})
+
+    assert response.status_code == 501
+    error = response.json()["error"]
+    assert error["code"] == "NOT_IMPLEMENTED"
+    assert error["detail"]["phase"]
+
+
+def test_the_implemented_economics_endpoints_return_real_arithmetic(
+    client: TestClient,
+) -> None:
+    """The threshold endpoint needs no model artefact: economics alone derive it."""
     response = client.post(
         "/v1/economics/threshold",
         json={
@@ -76,13 +97,13 @@ def test_unimplemented_endpoints_return_an_explicit_501(client: TestClient) -> N
             "contribution_margin_inr": 250.0,
             "abandonment_on_friction": 0.25,
             "intervention_success_rate": 0.60,
-            "friction_support_cost_inr": 8.0,
+            "friction_support_cost_inr": 0.0,
         },
     )
-    assert response.status_code == 501
-    error = response.json()["error"]
-    assert error["code"] == "NOT_IMPLEMENTED"
-    assert "Phase 2" in error["detail"]["phase"]
+    assert response.status_code == 200
+    body = response.json()
+    assert body["threshold"] == pytest.approx(0.3214, abs=1e-4)
+    assert body["cost_false_positive_inr"] == pytest.approx(62.5)
 
 
 def test_scoring_endpoint_does_not_fabricate_a_score(client: TestClient) -> None:

@@ -1,0 +1,197 @@
+{
+  "threshold": 0.34814814814814815,
+  "threshold_source": "derived from cost inputs: C_fp=70.50, S_tp=132.00",
+  "cost_profile": "mid_margin_d2c",
+  "split": "validation",
+  "n_orders": 2034,
+  "engine_version": "1.0.0",
+  "flag_rate": 0.19075712881022616,
+  "intervention_rate": 0.19075712881022616,
+  "expected_orders_affected": 388,
+  "expected_savings_inr": 15076.31962821765,
+  "expected_false_positive_cost_inr": 5622.397671126209,
+  "expected_false_negative_loss_inr": 70280.77551341116,
+  "expected_total_cost_inr": 75903.17318453737,
+  "expected_net_inr": 9453.921957091441,
+  "expected_net_inr_per_1000_orders": 4647.945898275045,
+  "support_cost_on_true_positives_inr": 703.1252993392029,
+  "realized_net_inr_per_1000_orders": 4724.508357915438,
+  "realized_true_positives": 187,
+  "realized_false_positives": 201,
+  "realized_false_negatives": 201,
+  "realized_true_negatives": 1445,
+  "realized_precision": 0.48195876288659795,
+  "realized_recall": 0.48195876288659795,
+  "do_nothing_loss_inr_per_1000_orders": -41966.56833824976,
+  "holdout_fraction_of_flagged": 0.02,
+  "net_inr_per_1000_after_holdout": 4554.9869803095435,
+  "bands": [
+    {
+      "band": "LOW",
+      "action": "none",
+      "lower_bound": 0.0,
+      "upper_bound": 0.34814814814814815,
+      "n_orders": 1646,
+      "share_of_book": 0.8092428711897739,
+      "expected_rto_orders": 201.3815828536169,
+      "realized_rto_orders": 201,
+      "intervention_success_rate": 0.0,
+      "abandonment_rate": 0.0,
+      "support_cost_inr": 0.0,
+      "expected_saving_inr": 0.0,
+      "expected_false_positive_cost_inr": 0.0,
+      "expected_net_inr": 0.0
+    },
+    {
+      "band": "ELEVATED",
+      "action": "prepaid_nudge",
+      "lower_bound": 0.34814814814814815,
+      "upper_bound": 0.5570370370370371,
+      "n_orders": 304,
+      "share_of_book": 0.14945919370698132,
+      "expected_rto_orders": 131.61940110306068,
+      "realized_rto_orders": 131,
+      "intervention_success_rate": 0.27,
+      "abandonment_rate": 0.075,
+      "support_cost_inr": 2.0,
+      "expected_saving_inr": 7818.1924255218055,
+      "expected_false_positive_cost_inr": 3576.8974271114907,
+      "expected_net_inr": 4241.294998410314
+    },
+    {
+      "band": "HIGH",
+      "action": "confirmation_required",
+      "lower_bound": 0.5570370370370371,
+      "upper_bound": 0.8355555555555555,
+      "n_orders": 84,
+      "share_of_book": 0.04129793510324484,
+      "expected_rto_orders": 54.985812141635186,
+      "realized_rto_orders": 56,
+      "intervention_success_rate": 0.6,
+      "abandonment_rate": 0.25,
+      "support_cost_inr": 8.0,
+      "expected_saving_inr": 7258.127202695845,
+      "expected_false_positive_cost_inr": 2045.5002440147189,
+      "expected_net_inr": 5212.626958681126
+    },
+    {
+      "band": "SEVERE",
+      "action": "prepaid_only",
+      "lower_bound": 0.8355555555555555,
+      "upper_bound": null,
+      "n_orders": 0,
+      "share_of_book": 0.0,
+      "expected_rto_orders": 0.0,
+      "realized_rto_orders": 0,
+      "intervention_success_rate": 0.78,
+      "abandonment_rate": 0.55,
+      "support_cost_inr": 14.0,
+      "expected_saving_inr": 0.0,
+      "expected_false_positive_cost_inr": 0.0,
+      "expected_net_inr": 0.0
+    }
+  ],
+  "collapsed_bands": [],
+  "quantities": [
+    {
+      "name": "rto_cost_inr",
+      "value": 220.0,
+      "unit": "INR",
+      "provenance": "merchant_input",
+      "source": "config/cost_model.yaml or the merchant's own figure",
+      "depends_on": []
+    },
+    {
+      "name": "contribution_margin_inr",
+      "value": 250.0,
+      "unit": "INR",
+      "provenance": "merchant_input",
+      "source": "config/cost_model.yaml or the merchant's own figure",
+      "depends_on": []
+    },
+    {
+      "name": "abandonment_on_friction",
+      "value": 0.25,
+      "unit": "probability",
+      "provenance": "assumed_intervention",
+      "source": "No measurement exists. Requires a controlled holdout to establish.",
+      "depends_on": []
+    },
+    {
+      "name": "intervention_success_rate",
+      "value": 0.6,
+      "unit": "probability",
+      "provenance": "assumed_intervention",
+      "source": "No measurement exists. Requires a controlled holdout to establish.",
+      "depends_on": []
+    },
+    {
+      "name": "cost_of_false_positive",
+      "value": 70.5,
+      "unit": "INR",
+      "provenance": "derived",
+      "source": "C_fp = abandonment x margin + support cost",
+      "depends_on": [
+        "merchant_input",
+        "assumed_intervention"
+      ]
+    },
+    {
+      "name": "saving_per_true_positive",
+      "value": 132.0,
+      "unit": "INR",
+      "provenance": "derived",
+      "source": "S_tp = intervention success x RTO cost",
+      "depends_on": [
+        "merchant_input",
+        "assumed_intervention"
+      ]
+    },
+    {
+      "name": "operating_threshold",
+      "value": 0.34814814814814815,
+      "unit": "probability",
+      "provenance": "derived",
+      "source": "threshold = C_fp / (C_fp + S_tp). Never 0.5, never fitted to labels.",
+      "depends_on": [
+        "merchant_input",
+        "assumed_intervention"
+      ]
+    },
+    {
+      "name": "flag_rate",
+      "value": 0.19075712881022616,
+      "unit": "probability",
+      "provenance": "derived",
+      "source": "Share of the scored book at or above the derived threshold",
+      "depends_on": [
+        "measured",
+        "derived"
+      ]
+    },
+    {
+      "name": "expected_false_positive_cost",
+      "value": 5622.397671126209,
+      "unit": "INR",
+      "provenance": "derived",
+      "source": "Reported separately and never netted away",
+      "depends_on": [
+        "measured",
+        "merchant_input",
+        "assumed_intervention"
+      ]
+    },
+    {
+      "name": "net_inr_saved_per_1000_orders",
+      "value": 4647.945898275045,
+      "unit": "INR/1000 orders",
+      "provenance": "derived",
+      "source": "TP x S_tp - FP x C_fp, measured against doing nothing",
+      "depends_on": [
+        "measured",
+        "merchant_input",
+        "assumed_intervention"
+      ]
+    }
+  ]
+}

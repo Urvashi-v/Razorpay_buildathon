@@ -51,8 +51,12 @@ somewhere honest to put each one.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from rto_sentinel.contracts.decision import CostInputs
+
+if TYPE_CHECKING:  # pragma: no cover - typing only
+    from rto_sentinel.configuration.schemas import BandEconomics
 
 
 @dataclass(frozen=True, slots=True)
@@ -121,4 +125,42 @@ def expected_value_of_flagging(probability: float, inputs: CostInputs) -> float:
     return (
         probability * economics.true_positive_saving_inr
         - (1.0 - probability) * economics.false_positive_cost_inr
+    )
+
+
+def band_outcome_economics(inputs: CostInputs, band: BandEconomics) -> OutcomeEconomics:
+    """Per-outcome rupee values for ONE RUNG of the friction ladder.
+
+    THE MULTIPLIERS ARE ASSUMPTIONS AND THE ARITHMETIC CANNOT HIDE THAT
+    ==================================================================
+    A graduated ladder is only worth building if the rungs differ economically -
+    a declinable nudge should not be credited with the same save rate as removing
+    cash on delivery. So each band scales the merchant's own rates::
+
+        S_tp(band) = (success_rate x success_multiplier) x rto_cost
+        C_fp(band) = (abandonment x abandonment_multiplier) x margin
+                     + band_support_cost
+
+    But **nobody has measured any of those multipliers on this data**, and they
+    cannot be measured without running the interventions and observing the
+    counterfactual. They are declared in ``config/policy.yaml`` with a rationale
+    each, tagged ``assumed_intervention`` wherever they reach a report, and they
+    are the single largest source of uncertainty in every rupee figure this
+    system produces.
+
+    Rates are clamped to ``[0, 1]`` after scaling: a multiplier can push a
+    success or abandonment rate above 1, and a probability greater than one is
+    not a stronger intervention, it is a broken input.
+    """
+    success = min(
+        max(inputs.intervention_success_rate * band.intervention_success_multiplier, 0.0), 1.0
+    )
+    abandonment = min(max(inputs.abandonment_on_friction * band.abandonment_multiplier, 0.0), 1.0)
+    return OutcomeEconomics(
+        true_positive_saving_inr=success * inputs.rto_cost_inr,
+        false_positive_cost_inr=(
+            abandonment * inputs.contribution_margin_inr + band.support_cost_inr
+        ),
+        false_negative_loss_inr=inputs.rto_cost_inr,
+        true_negative_value_inr=0.0,
     )

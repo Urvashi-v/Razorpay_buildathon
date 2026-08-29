@@ -32,12 +32,13 @@ evaluation report object, and on the console — not only here.
 
 ---
 
-## Current status: Phase 5 of 6
+## Current status: Phase 6 of 6
 
 **Phase 1** established the architecture, **Phase 2** built the data layer,
 **Phase 3** built the feature pipeline and the leakage defences, **Phase 4** built
-and measured the baseline ladder, and **Phase 5** produced the calibrated final
-model and evaluated it once on the sealed test set. The following are
+and measured the baseline ladder, **Phase 5** produced the calibrated final model
+and evaluated it once on the sealed test set, and **Phase 6** turned calibrated
+probabilities into economically justified decisions. The following are
 implemented, tested, and working:
 
 - A reproducible **benchmark generator** with a documented causal simulation
@@ -47,41 +48,42 @@ implemented, tested, and working:
 - **Label maturity**: unresolved orders get a NULL label, never "delivered"
 - **Split protocol**: temporal windows inside disjoint customer pools, sealed test set
 - **Six feature families** behind a typed dataset contract, each independently
-  ablatable, each feature documenting its lookback and its availability at
-  scoring time
-- **Eleven leakage tests** — the four the specification promises plus the seven
-  from Phase 3 — running against real generated data
-- **The complete baseline ladder**, rungs 0–4, trained and evaluated on identical
-  footing at a cost-derived threshold
-- **A calibrated final model**: a capacity search over seven LightGBM
-  configurations selected by a one-standard-error rule, then a calibration method
-  chosen by cross-validation *inside* the validation split
-- **A frozen selection manifest** that the sealed-set command refuses to run
-  without, and a **single test-set evaluation** with a written unseal reason
-- **A generated model card** — [docs/model_card.md](docs/model_card.md) — whose
-  prose is reviewed configuration and whose every number is read from the
-  measured artefacts
-- **Experiment tracking**: six versions pinned per result, machine-readable
-  records, per-order scores, plots, metrics JSON and comparison CSV
-- **Model artefacts**: joblib payload, provenance card, SHA-256 checksum verified
-  before unpickling
+  ablatable, each documenting its lookback and availability at scoring time
+- **Eleven leakage tests** running against real generated data
+- **The complete baseline ladder**, rungs 0–4, on identical footing
+- **A calibrated final model**: a capacity search selected by a one-standard-error
+  rule, then a calibration method chosen by cross-validation *inside* validation
+- **A frozen selection manifest** and a **single test-set evaluation**
+- **A deterministic economic decision engine**: cost-derived threshold, four-rung
+  friction ladder, stable reason codes, and a `Decision` type that cannot express
+  a silent hard block
+- **Portfolio economics** in two modes — expected (from probabilities alone, no
+  labels) and realized (from outcomes) — with the gap reported as a calibration
+  check
+- **A threshold sweep** whose contract *requires* it to state that the operating
+  point is derived from economics rather than read off the curve
+- **A merchant simulation service and API** that genuinely recalculates the
+  threshold, the band boundaries, every order's assignment and the rupee totals
+  server-side
+- **A provenance taxonomy** carried by every reported number, separating measured
+  metrics from merchant inputs, published figures, simulator parameters and
+  unmeasured intervention assumptions
+- **Generated reports**: [docs/model_card.md](docs/model_card.md) and
+  [docs/economics.md](docs/economics.md), neither ever hand-edited
 - A CLI covering generate / validate / migrate / seed / query / features / split /
-  train / evaluate / final / final-test / final-report
-- Typed, validating configuration with a content fingerprint
-- FastAPI application with a working `/health` and `/readiness`
+  train / evaluate / final / final-test / final-report / economics
+- FastAPI application with working health, threshold, simulation and sweep endpoints
 - A React console that reads live backend status
 
-**No decision layer exists yet.** The model produces a calibrated probability and
-stops there; the policy bands, the decision engine and the serving path are
-Phase 6, as are the dashboard and the agent layer. Those remain **scaffolded with
-fixed interfaces and not implemented**: their endpoints return
-`501 NOT_IMPLEMENTED` and their functions raise `NotImplementedError` naming the
-phase. Nothing returns placeholder data. **The cohort and fairness audit has not
-been run**, so no fairness claim about this model should be made.
+**What is still not built.** The decision *serving* path (scoring a live order
+through the API), the console's queue and sliders, the agent layer, and the
+outcome loop. Those endpoints return `501 NOT_IMPLEMENTED` and their functions
+raise `NotImplementedError`. Nothing returns placeholder data. **The cohort and
+fairness audit has not been run**, so no fairness claim should be made.
 
 Full breakdown: [ARCHITECTURE.md § Implementation status](ARCHITECTURE.md#8-implementation-status).
-Measured results: [docs/ladder_results.md](docs/ladder_results.md) and
-[docs/model_card.md](docs/model_card.md).
+Measured results: [docs/ladder_results.md](docs/ladder_results.md),
+[docs/model_card.md](docs/model_card.md) and [docs/economics.md](docs/economics.md).
 
 ---
 
@@ -188,6 +190,29 @@ rto-sentinel final-report
 Re-renders the model card and the CSVs from saved artefacts. It reads no split, so
 improving how a result is presented never requires re-measuring it.
 
+### Price the policy and simulate a merchant
+
+```bash
+rto-sentinel economics
+```
+
+Prices the shipped policy against the calibrated validation book: the friction
+ladder rung by rung, expected and realized economics, the threshold sweep, a
+sensitivity analysis, the graduated-ladder-versus-uniform comparison, and one
+simulation per cost profile. Writes [docs/economics.md](docs/economics.md), two
+CSVs, two JSON artefacts and three plots. It never touches the sealed split — the
+sweep and the simulator both refuse it.
+
+The same recomputation is available over HTTP:
+
+```bash
+curl -s localhost:8000/v1/economics/simulate -H 'content-type: application/json' -d '{"cost_inputs":{"rto_cost_inr":220,"contribution_margin_inr":400,"abandonment_on_friction":0.25,"intervention_success_rate":0.6,"friction_support_cost_inr":8}}'
+```
+
+Changing the margin re-derives the threshold, moves every band boundary with it,
+re-assigns every order, and re-prices the book — server-side. No economic
+arithmetic happens in the browser.
+
 ### Run the API
 
 ```bash
@@ -291,8 +316,11 @@ threshold = C_fp / (C_fp + S_tp)
 
 With the spec's worked example — RTO cost ₹220, contribution margin ₹250,
 abandonment 25%, intervention success 60% — the threshold is **0.32, not 0.5**.
-And it moves with the merchant's margin: a high-margin brand should flag more
-aggressively than a thin-margin reseller. The console exposes all four inputs as
+And it moves with the merchant's margin - in the direction opposite to the
+common intuition. A high-margin brand flags **less** readily than a thin-margin
+reseller, because the margin is what a false positive costs: the more you stood
+to earn on an order, the more certainty you should demand before risking it. The
+console exposes all four inputs as
 sliders and the threshold recomputes live.
 
 ### 3. Act
@@ -382,6 +410,27 @@ The gap between that and rung 3's 0.483 is the honest headroom; the gap between
 flags 4.8% of orders at 26.5% precision, which is barely above the 19.1% base
 rate, and the friction costs more than the prevented RTOs save. A baseline that
 loses money is a useful result, and it is reported rather than dropped.
+
+### What the economics showed
+
+Full detail: [docs/economics.md](docs/economics.md). Three results worth stating:
+
+**The graduated ladder loses to a uniform policy.** Under the intervention
+multipliers this project ships with, applying `confirmation_required` to
+everything above the threshold nets ₹5,130 per 1,000 orders against the ladder's
+₹4,648. The gentlest rung carries most of the flagged volume and is assumed to
+convert least often, so graduating downwards gives up more saving than it avoids
+in abandonment. That is a finding about the assumptions, not about reality — but
+they are the assumptions the system ships with.
+
+**The SEVERE tier never fires on this book.** No order scores above 0.8356, so
+the strongest rung is configured and unused. Reported rather than hidden: a rung
+that never fires is a rung the merchant is not actually using.
+
+**A higher margin flags fewer orders, not more.** This repository documented the
+opposite in four places until the merchant simulator made the contradiction
+visible. The margin is what a false positive costs, so a merchant with more to
+lose demands more certainty. Corrected, and now asserted by a test.
 
 ### What the sealed test set showed
 
@@ -477,6 +526,7 @@ a key must be present.
 | [docs/splitting.md](docs/splitting.md) | The split protocol, and why random splitting would be dangerous |
 | [docs/ladder_results.md](docs/ladder_results.md) | **Measured baseline-ladder results.** Generated, never hand-written |
 | [docs/model_card.md](docs/model_card.md) | **The final model's card.** Intended use, limitations, fairness, drift, and every measured number |
+| [docs/economics.md](docs/economics.md) | **The economic evaluation.** Threshold derivation, the friction ladder, expected and realized rupees, sensitivity, and where every number came from |
 | [REPORT.md](REPORT.md) | Final report — written once the system is complete |
 | [docs/sources.md](docs/sources.md) | Every market figure, with its citation |
 | [docs/adr/](docs/adr/) | Architecture decision records |

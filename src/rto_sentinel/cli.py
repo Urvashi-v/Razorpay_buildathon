@@ -49,8 +49,10 @@ from rto_sentinel.settings import REPO_ROOT, Settings, get_settings
 if TYPE_CHECKING:  # pragma: no cover - typing only
     import pandas as pd
 
+    from rto_sentinel.contracts.economics import PortfolioEconomics, ThresholdSweep
     from rto_sentinel.contracts.experiment import LadderResults
     from rto_sentinel.contracts.final import FinalEvaluation, SelectionManifest
+    from rto_sentinel.decision.simulation import SimulationResult
     from rto_sentinel.features.dataset import ModelingDataset
 
 # ---------------------------------------------------------------------------
@@ -939,6 +941,234 @@ def _cmd_final_report(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_economics(args: argparse.Namespace) -> int:
+    """Price the shipped policy, sweep the threshold, and write the report.
+
+    Reads the calibrated validation book written by `rto-sentinel final`. It
+    never touches the sealed split - the sweep and the simulator both refuse it -
+    so this command can be re-run as often as anyone likes.
+    """
+    from rto_sentinel.configuration import load_cost_model_config, load_policy_config
+    from rto_sentinel.decision.engine import ENGINE_VERSION
+    from rto_sentinel.decision.portfolio import evaluate_portfolio
+    from rto_sentinel.decision.simulation import compare_ladder_against_uniform, simulate
+    from rto_sentinel.decision.threshold_analysis import sweep_thresholds
+    from rto_sentinel.eval.economics_report import (
+        render_economics_report,
+        write_band_csv,
+        write_economics_report,
+        write_sweep_csv,
+    )
+    from rto_sentinel.models import load_scored_book
+    from rto_sentinel.models.experiment import cost_inputs_from_profile
+
+    settings = get_settings()
+    try:
+        book = load_scored_book(settings.artifact_path, split="validation")
+    except FileNotFoundError as error:
+        print(str(error), file=sys.stderr)
+        return 1
+
+    cost_config = load_cost_model_config(settings)
+    policy = load_policy_config(settings)
+    profile_key = args.profile or cost_config.default_profile
+    if profile_key not in cost_config.profiles:
+        print(
+            f"unknown cost profile {profile_key!r}; have {sorted(cost_config.profiles)}",
+            file=sys.stderr,
+        )
+        return 1
+    cost_inputs = cost_inputs_from_profile(cost_config.profiles[profile_key])
+
+    print(f"\nscored book : {book.n_orders:,} orders, {book.split} split")
+    print(f"model       : v{book.model_version}  (dataset {book.dataset_run_id})")
+    print(f"profile     : {profile_key}")
+
+    economics = evaluate_portfolio(
+        book.probabilities,
+        cost_inputs=cost_inputs,
+        policy=policy,
+        labels=book.labels,
+        split=book.split,
+        cost_profile=profile_key,
+        engine_version=ENGINE_VERSION,
+    )
+
+    print(f"\nthreshold   : {economics.threshold:.4f}  ({economics.threshold_source})")
+    print("\nintervention ladder")
+    header = (
+        f"  {'band':<9}{'action':<24}{'range':<20}{'orders':>8}{'share':>8}"
+        f"{'E[RTO]':>9}{'net INR':>12}"
+    )
+    print(header)
+    print("  " + "-" * (len(header) - 2))
+    for band in economics.bands:
+        upper = "1.0" if band.upper_bound is None else f"{band.upper_bound:.4f}"
+        span = f"[{band.lower_bound:.4f}, {upper})"
+        print(
+            f"  {band.band.value:<9}{band.action.value:<24}{span:<20}{band.n_orders:>8,}"
+            f"{band.share_of_book:>8.1%}{band.expected_rto_orders:>9.1f}"
+            f"{band.expected_net_inr:>12,.0f}"
+        )
+    for entry in economics.collapsed_bands:
+        print(f"  collapsed: {entry}")
+
+    print("\neconomic outcome")
+    print(f"  flag rate          : {economics.flag_rate:.4f}")
+    print(f"  intervention rate  : {economics.intervention_rate:.4f}")
+    print(f"  orders affected    : {economics.expected_orders_affected:,}")
+    print(f"  expected savings   : INR {economics.expected_savings_inr:>12,.0f}")
+    print(f"  false-positive cost: INR {economics.expected_false_positive_cost_inr:>12,.0f}")
+    print(f"  residual FN loss   : INR {economics.expected_false_negative_loss_inr:>12,.0f}")
+    print(f"  expected total cost: INR {economics.expected_total_cost_inr:>12,.0f}")
+    print(f"  expected net/1k    : INR {economics.expected_net_inr_per_1000_orders:>12,.0f}")
+    if economics.realized_net_inr_per_1000_orders is not None:
+        print(f"  realized net/1k    : INR {economics.realized_net_inr_per_1000_orders:>12,.0f}")
+        print(
+            f"  calibration gap    : {economics.calibration_gap:+.1f} true positives "
+            f"(expected {economics.expected_true_positives:.1f})"
+        )
+    print(f"  do-nothing loss/1k : INR {economics.do_nothing_loss_inr_per_1000_orders:>12,.0f}")
+    print(f"  net after holdout  : INR {economics.net_inr_per_1000_after_holdout:>12,.0f}")
+
+    sweep = sweep_thresholds(
+        book.probabilities,
+        book.labels,
+        cost_inputs=cost_inputs,
+        split=book.split,
+        cost_profile=profile_key,
+    )
+    print(
+        f"\nthreshold sweep    : derived {sweep.derived_threshold:.4f}, "
+        f"curve peaks at {sweep.best_net_threshold:.4f}"
+    )
+    print("  the operating point is DERIVED from economics and is never read off the curve.")
+
+    comparison = compare_ladder_against_uniform(
+        book.probabilities, cost_inputs=cost_inputs, policy=policy, labels=book.labels
+    )
+    print(f"\ngraduated ladder   : INR {comparison.graduated_net_inr_per_1000:>10,.0f} per 1,000")
+    for action, value in sorted(comparison.uniform_net_inr_per_1000.items(), key=lambda i: -i[1]):
+        print(f"  uniform {action:<22}: INR {value:>10,.0f}")
+    print(f"  graduated wins     : {comparison.graduated_wins}")
+
+    # Merchant simulations: every configured profile, plus the margin change the
+    # specification names explicitly.
+    simulations = []
+    for key, profile in cost_config.profiles.items():
+        inputs = cost_inputs_from_profile(profile)
+        simulations.append(
+            (
+                profile.label,
+                simulate(
+                    book.probabilities,
+                    cost_inputs=inputs,
+                    policy=policy,
+                    labels=book.labels,
+                    split=book.split,
+                    cost_profile=key,
+                    baseline=cost_inputs,
+                ),
+            )
+        )
+    for margin in (250.0, 400.0):
+        simulations.append(
+            (
+                f"Margin changed to INR {margin:,.0f}",
+                simulate(
+                    book.probabilities,
+                    cost_inputs=cost_inputs.model_copy(update={"contribution_margin_inr": margin}),
+                    policy=policy,
+                    labels=book.labels,
+                    split=book.split,
+                    cost_profile=profile_key,
+                    baseline=cost_inputs,
+                ),
+            )
+        )
+
+    print("\nmerchant simulation (recomputed server-side, nothing scaled)")
+    header = f"  {'scenario':<44}{'margin':>9}{'threshold':>11}{'flag':>8}{'net/1k':>10}"
+    print(header)
+    print("  " + "-" * (len(header) - 2))
+    for label, result in simulations:
+        print(
+            f"  {label[:43]:<44}{result.threshold.inputs.contribution_margin_inr:>9,.0f}"
+            f"{result.threshold.threshold:>11.4f}{result.economics.flag_rate:>8.3f}"
+            f"{result.economics.expected_net_inr_per_1000_orders:>10,.0f}"
+        )
+
+    if args.no_write:
+        return 0
+
+    directory = settings.artifact_path / "economics" / book.dataset_run_id
+    directory.mkdir(parents=True, exist_ok=True)
+
+    economics_path = directory / f"portfolio__{profile_key}.json"
+    economics_path.write_text(economics.model_dump_json(indent=2), encoding="utf-8")
+    print(f"\nportfolio economics : {economics_path}")
+
+    sweep_path = directory / f"sweep__{profile_key}.json"
+    sweep_path.write_text(sweep.model_dump_json(indent=2), encoding="utf-8")
+    print(f"threshold sweep     : {sweep_path}")
+
+    print(f"sweep CSV           : {write_sweep_csv(sweep, directory / 'threshold_sweep.csv')}")
+    print(f"band CSV            : {write_band_csv(economics, directory / 'bands.csv')}")
+
+    document = render_economics_report(
+        economics=economics,
+        sweep=sweep,
+        comparison=comparison,
+        cost_inputs=cost_inputs,
+        cost_config=cost_config,
+        policy=policy,
+        simulations=simulations,
+    )
+    report_path = write_economics_report(REPO_ROOT / "docs" / "economics.md", document)
+    print(f"report              : {report_path}")
+
+    # A CONTROLLED margin sweep for the figure: one input varied, everything else
+    # held fixed. The profile table above varies three inputs at once, which is
+    # the right comparison for a merchant and the wrong one for a causal claim.
+    margin_sweep = [
+        (
+            margin,
+            simulate(
+                book.probabilities,
+                cost_inputs=cost_inputs.model_copy(update={"contribution_margin_inr": margin}),
+                policy=policy,
+                labels=book.labels,
+                split=book.split,
+                cost_profile=profile_key,
+            ),
+        )
+        for margin in (50.0, 100.0, 150.0, 250.0, 400.0, 600.0, 900.0, 1400.0)
+    ]
+
+    for path in _write_economics_plots(economics, sweep, margin_sweep, directory):
+        print(f"plot                : {path}")
+    return 0
+
+
+def _write_economics_plots(
+    economics: PortfolioEconomics,
+    sweep: ThresholdSweep,
+    margin_sweep: list[tuple[float, SimulationResult]],
+    directory: Path,
+) -> list[Path]:
+    from rto_sentinel.eval.plots import (
+        plot_band_economics,
+        plot_margin_response,
+        plot_threshold_economics,
+    )
+
+    return [
+        plot_threshold_economics(sweep, directory / "threshold_economics.png"),
+        plot_band_economics(economics, directory / "band_economics.png"),
+        plot_margin_response(margin_sweep, directory / "margin_response.png"),
+    ]
+
+
 def _cmd_evaluate(args: argparse.Namespace) -> int:
     """Re-render the comparison from saved experiment artefacts.
 
@@ -1138,6 +1368,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="re-render the model card and CSVs from saved artefacts (reads no split)",
     )
     final_report.set_defaults(func=_cmd_final_report)
+
+    economics = sub.add_parser(
+        "economics",
+        help="price the shipped policy, sweep the threshold, and write the economic report",
+    )
+    economics.add_argument(
+        "--profile", default=None, help="cost profile to price (default: the configured default)"
+    )
+    economics.add_argument("--no-write", action="store_true", help="skip writing artefacts")
+    economics.set_defaults(func=_cmd_economics)
 
     evaluate = sub.add_parser(
         "evaluate", help="re-render the comparison from saved experiment artefacts"

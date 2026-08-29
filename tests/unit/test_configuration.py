@@ -65,7 +65,13 @@ def test_worked_example_profile_matches_the_specification(settings: Settings) ->
 
 
 def test_merchant_economics_move_the_threshold(settings: Settings) -> None:
-    """A high-margin brand should flag more aggressively than a thin-margin one.
+    """A high-margin brand flags LESS readily than a thin-margin one.
+
+    The direction is counter-intuitive and was documented backwards across this
+    repository until Phase 6's merchant simulation made it visible. The margin is
+    what a false positive costs, so a merchant with more margin to lose demands
+    more certainty before frictioning an order - the threshold rises and the flag
+    rate falls.
 
     SPEC section 06. Checking it on the shipped profiles means the demo's central
     claim is a property of the configuration rather than a story told over it.

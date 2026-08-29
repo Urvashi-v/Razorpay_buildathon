@@ -12,6 +12,26 @@
 #      config/cost_model.yaml. It is NEVER hardcoded here and NEVER 0.5.
 #   4. The sub-band cut points below are multipliers ON that derived threshold,
 #      so the whole ladder moves when the merchant's economics move.
+#
+# EVERY `economics` BLOCK BELOW IS AN ASSUMPTION, NOT A MEASUREMENT
+# -----------------------------------------------------------------
+# A graduated ladder is only worth having if the rungs differ economically: a
+# prepaid nudge is gentler and less effective than a prepaid-only mandate, and
+# the rupee arithmetic should say so. But NOBODY HAS MEASURED how effective any
+# of these interventions is on this data, and it is not measurable without
+# running them and observing the counterfactual - which is exactly what
+# `holdout_control` below exists to make possible later.
+#
+# So the multipliers are declared here, carried through the arithmetic tagged
+# `assumed_intervention` (see contracts/provenance.py), and reported as
+# assumptions everywhere they appear. They are shaped, not measured:
+#
+#   * gentler action  -> lower success, lower abandonment, lower support cost
+#   * stronger action -> higher success, higher abandonment, higher support cost
+#
+# HIGH is the anchor at 1.0/1.0, so the merchant's own
+# `intervention_success_rate` and `abandonment_on_friction` describe a
+# confirmation request, and the spec's worked threshold is reproduced exactly.
 # =============================================================================
 version: 1
 
@@ -25,6 +45,13 @@ bands:
     requires_appeal_path: false
     requires_human_review_queue: false
     description: "COD offered freely. Zero friction is the default state."
+    economics:
+      # No action, so no cost and no benefit. Present for uniformity: every band
+      # answers the same questions, and a missing block would read as an omission.
+      intervention_success_multiplier: 0.0
+      abandonment_multiplier: 0.0
+      support_cost_inr: 0.0
+      rationale: "No friction applied, so nothing is saved and nothing is risked."
 
   - name: ELEVATED
     upper_bound_multiplier: 1.6
@@ -36,6 +63,13 @@ bands:
     requires_human_review_queue: false
     description: "Prepaid nudge with a small incentive. Positive-sum - cheaper
                   than an RTO, and the customer gains something."
+    economics:
+      # An optional nudge: most customers ignore it, few are driven away.
+      intervention_success_multiplier: 0.45
+      abandonment_multiplier: 0.30
+      support_cost_inr: 2.0
+      rationale: "ASSUMED. A nudge is declinable, so it converts less often than a
+                  confirmation request and costs less goodwill when it fails."
 
   - name: HIGH
     upper_bound_multiplier: 2.4
@@ -48,6 +82,14 @@ bands:
     requires_human_review_queue: false
     description: "COD allowed after one-tap confirmation before dispatch.
                   Low friction, high signal."
+    economics:
+      # The anchor. The merchant's own rates describe this rung, which keeps the
+      # spec's worked threshold exact.
+      intervention_success_multiplier: 1.0
+      abandonment_multiplier: 1.0
+      support_cost_inr: 8.0
+      rationale: "ASSUMED, and the anchor: the merchant-provided success and
+                  abandonment rates are taken to describe a confirmation request."
 
   - name: SEVERE
     upper_bound_multiplier: null       # open-ended top band
@@ -60,6 +102,16 @@ bands:
     description: "Prepaid-only with a visible appeal path. Reserved for a small
                   tail. Never silent, never permanent, always reversible by an
                   ops human."
+    economics:
+      # Removing COD entirely: the most effective rung and the most costly when
+      # applied to a customer who would have paid on delivery.
+      intervention_success_multiplier: 1.30
+      abandonment_multiplier: 2.20
+      support_cost_inr: 14.0
+      rationale: "ASSUMED. Removing the payment method the customer chose is the
+                  strongest lever and the one most likely to lose a good order.
+                  The abandonment multiplier is deliberately the largest number in
+                  this file: if it is wrong, SEVERE is where the damage lands."
 
 safeguards:
   hard_block_allowed: false            # asserted by tests/unit/test_policy_config.py
