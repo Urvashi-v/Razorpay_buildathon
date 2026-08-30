@@ -73,6 +73,38 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 #: transform that leaves the declaration identical.
 FEATURE_VERSION = "1.0.0"
 
+#: Feature-name prefix -> family. Every feature this project emits is named
+#: ``<prefix>_<rest>`` and each prefix belongs to exactly one family, which
+#: `test_every_feature_prefix_maps_to_its_family` asserts against the live
+#: feature set rather than trusting this table.
+#:
+#: It exists because a trained artefact carries feature *names* and not the
+#: FeatureSet that produced them, so a model asked for attributions at serving
+#: time has only the name to work from. Deriving the family by splitting on the
+#: first underscore - which is what the Phase 4 placeholder did - yields "cust"
+#: and "addr", and the reason-code table is keyed on the real family names, so
+#: every code silently lost its prefix.
+FAMILY_BY_PREFIX: dict[str, str] = {
+    "cust": "customer_history",
+    "temporal": "temporal",
+    "order": "order_shape",
+    "addr": "address_quality",
+    "session": "session_intent",
+    "geo": "geography_route",
+}
+
+
+def family_of(feature_name: str) -> str:
+    """The family a feature belongs to, from its name.
+
+    Falls back to the bare prefix for a feature this table does not know. A new
+    family should be added here; until it is, an unfamiliar prefix produces a
+    recognisable reason code rather than an exception in the scoring path.
+    """
+    prefix = feature_name.split("_", 1)[0]
+    return FAMILY_BY_PREFIX.get(prefix, prefix)
+
+
 #: Families, in the order they are applied. Registered here rather than
 #: discovered, so adding one is a deliberate, reviewable act.
 FAMILY_REGISTRY: dict[str, type[FeatureFamily]] = {

@@ -24,31 +24,60 @@ until the model lands rather than fabricating a plausible response.
 
 from __future__ import annotations
 
-from datetime import datetime
+from typing import Annotated
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Body, status
 from pydantic import BaseModel, Field
 
-from rto_sentinel.api.deps import AppConfigDep, DecisionEngineDep, SettingsDep
-from rto_sentinel.api.errors import ErrorResponse, not_implemented
+from rto_sentinel.api.deps import AssessmentServiceDep
+from rto_sentinel.api.errors import ApiError, ErrorCode, ErrorResponse
+from rto_sentinel.api.routers.orders import RiskAssessmentResponse, assessment_response
 from rto_sentinel.contracts.decision import CostInputs
-from rto_sentinel.contracts.enums import InterventionAction, RiskBand
-from rto_sentinel.contracts.orders import OrderPayload
-from rto_sentinel.contracts.risk import FeatureContribution
+from rto_sentinel.serving.assessment import OrderNotFoundError
+
+#: Orders per batch request. Each one rebuilds its feature context from the
+#: database, so this is a real cost ceiling rather than a formality.
+MAX_BATCH = 25
 
 router = APIRouter(prefix="/v1", tags=["scoring"])
 
 
-class ScoreRequest(BaseModel):
-    """An order to score, with optional per-merchant cost overrides.
+# `ScoreRequest` and `ScoreResponse` were the Phase 1 placeholders for this
+# surface. They accepted a whole order payload and returned a flat score.
+#
+# Both were removed in Phase 7 rather than kept alongside the real thing. The
+# payload form could not be implemented honestly - an order that is not in the
+# database has no history and no geographic context, so scoring it would produce
+# a confident number for a customer the model would treat as brand new. The flat
+# response had no room for the model version, the feature provenance or the
+# economic assumptions that a probability needs to travel with.
+#
+# `RiskAssessmentResponse`, defined in `orders.py` and shared with
+# `GET /v1/orders/{order_id}/risk`, replaces both. One shape, one code path, no
+# way for the two surfaces to disagree about what a score means.
 
-    ``cost_inputs`` is optional: when omitted the merchant's configured profile
-    is used. It is exposed on the request so the console's threshold sliders can
-    re-score a live order stream without a configuration write, which is the
-    thirty seconds of the demo that shows the model is embedded in a business.
+
+class StoredOrderScoreRequest(BaseModel):
+    """Score an order already in the database, optionally under custom economics.
+
+    WHY THE ORDER IS REFERENCED RATHER THAN SUBMITTED
+    -------------------------------------------------
+    The features this model needs are not all on the order. Customer history and
+    geography aggregates are computed from the merchant's book as of the order's
+    own timestamp, so an order that has never been persisted cannot be scored
+    correctly - it would arrive with no history and be treated as a first-time
+    customer in an unknown pincode.
+
+    Accepting a full :class:`OrderPayload` and scoring it anyway would produce a
+    number for every request and quietly wrong numbers for most of them.
+    Ingestion of new orders is a separate concern from scoring stored ones, and
+    conflating them is how a serving path starts lying.
     """
 
-    order: OrderPayload
+    order_id: str = Field(max_length=64, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$")
+    dataset_run_id: str | None = Field(
+        default=None, max_length=64, description="Disambiguates ids shared across runs"
+    )
     cost_inputs: CostInputs | None = Field(
         default=None, description="Overrides the merchant's configured cost profile"
     )
@@ -57,66 +86,63 @@ class ScoreRequest(BaseModel):
     )
 
 
-class ScoreResponse(BaseModel):
-    """The full scoring result.
-
-    Note that probability, threshold, band and action all travel together. The
-    console never receives a probability without the threshold that interpreted
-    it - a bare score invites someone to compare it against 0.5, which is the
-    error this whole system exists to correct.
-    """
-
-    order_id: str
-    probability: float = Field(ge=0.0, le=1.0, description="Calibrated P(RTO)")
-    threshold: float = Field(ge=0.0, le=1.0, description="Cost-derived operating point")
-    band: RiskBand
-    action: InterventionAction
-    flagged: bool
-    reason_codes: list[str]
-    expected_value_inr: float
-    appeal_available: bool = True
-    human_review_required: bool = False
-    contributions: list[FeatureContribution] = Field(default_factory=list)
-    model_name: str
-    model_version: str
-    engine_version: str
-    scored_at: datetime
-    latency_ms: float | None = None
-    data_provenance: str = Field(
-        default="Model trained on synthetic data; see README for what that does and does not claim."
-    )
-
-
 @router.post(
     "/score",
-    response_model=ScoreResponse,
-    summary="Score one order and return a graduated, appealable action",
+    response_model=RiskAssessmentResponse,
+    summary="Score one stored order and return a graduated, appealable action",
     responses={
-        501: {"model": ErrorResponse, "description": "Scoring not yet implemented (Phase 3)"},
-        503: {"model": ErrorResponse, "description": "No model artefact loaded"},
+        404: {"model": ErrorResponse, "description": "No such order"},
+        503: {"model": ErrorResponse, "description": "No calibrated model artefact loaded"},
     },
 )
 def score_order(
-    request: ScoreRequest,
-    settings: SettingsDep,
-    config: AppConfigDep,
-    engine: DecisionEngineDep,
-) -> ScoreResponse:
-    """Score an order. See the module docstring for the failure posture."""
-    raise not_implemented("Order scoring", "Phase 3 (model training and inference)")
+    request: StoredOrderScoreRequest, service: AssessmentServiceDep
+) -> RiskAssessmentResponse:
+    """Run the whole chain for one order. See the module docstring for the posture.
+
+    Identical in effect to ``GET /v1/orders/{order_id}/risk``, and calls the same
+    service. It exists as a POST because it accepts custom cost inputs, which do
+    not belong in a query string.
+    """
+    try:
+        assessment = service.assess(
+            request.order_id,
+            dataset_run_id=request.dataset_run_id,
+            cost_inputs=request.cost_inputs,
+            include_contributions=request.include_contributions,
+        )
+    except OrderNotFoundError as error:
+        raise ApiError(
+            ErrorCode.ORDER_NOT_FOUND,
+            str(error),
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"order_id": request.order_id},
+        ) from error
+    return assessment_response(assessment)
 
 
 @router.post(
     "/score/batch",
-    summary="Score a batch of orders",
-    status_code=status.HTTP_501_NOT_IMPLEMENTED,
-    responses={501: {"model": ErrorResponse}},
+    response_model=list[RiskAssessmentResponse],
+    summary="Score several stored orders",
+    responses={
+        404: {"model": ErrorResponse, "description": "No such order"},
+        503: {"model": ErrorResponse, "description": "No calibrated model artefact loaded"},
+    },
 )
 def score_batch(
-    requests: list[ScoreRequest],
-    settings: SettingsDep,
-    config: AppConfigDep,
-    engine: DecisionEngineDep,
-) -> list[ScoreResponse]:
-    """Batch scoring for the console's live order stream."""
-    raise not_implemented("Batch scoring", "Phase 3 (model training and inference)")
+    requests: Annotated[list[StoredOrderScoreRequest], Body(max_length=MAX_BATCH)],
+    service: AssessmentServiceDep,
+) -> list[RiskAssessmentResponse]:
+    """Batch scoring for the console's order stream.
+
+    Capped at ``MAX_BATCH``. Each order rebuilds its own feature context from the
+    database, so a batch is genuinely N times the work of one order rather than a
+    vectorised shortcut - an uncapped batch would be a denial-of-service surface
+    dressed as a convenience.
+
+    Fails on the first missing order rather than returning partial results. A
+    caller receiving nine scores where it asked for ten, with no indication which
+    is absent, is worse off than one receiving an error.
+    """
+    return [score_order(request, service) for request in requests]

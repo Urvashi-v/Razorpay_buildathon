@@ -164,11 +164,15 @@ class LightGbmModel(RiskModel):
     def explain(self, x: pd.DataFrame, top_k: int = 5) -> list[list[FeatureContribution]]:
         """Per-row SHAP contributions.
 
-        Not used in Phase 4 - reason codes are Phase 6 - but implemented here
-        because it is a property of this rung rather than of the decision layer,
-        and because the harness must be able to call it uniformly.
+        The ``family`` on each contribution is resolved through
+        ``features.family_of`` rather than by splitting the feature name. The
+        decision layer's reason-code table is keyed on real family names, so a
+        guessed one ("cust" instead of "customer_history") produces codes that
+        silently lose their operational prefix - which is exactly what happened
+        until the serving path started using these attributions.
         """
         from rto_sentinel.contracts.risk import FeatureContribution
+        from rto_sentinel.features.pipeline import family_of
 
         if self.booster_ is None:
             msg = "model is not fitted"
@@ -185,7 +189,7 @@ class LightGbmModel(RiskModel):
                 [
                     FeatureContribution(
                         feature=self.feature_names_[position],
-                        family=self.feature_names_[position].split("_")[0],
+                        family=family_of(self.feature_names_[position]),
                         value=_scalar(x.iloc[index, position]),
                         contribution=float(contributions[index][position]),
                     )

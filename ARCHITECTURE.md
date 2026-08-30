@@ -375,6 +375,42 @@ alone `WHERE dataset_run_id IS NULL`, so serving-path rows — real orders, part
 no benchmark — keep global uniqueness. The composite constraint alone would not
 give them that: SQL treats NULLs as distinct.
 
+### 3.9b Serving (`serving/`) — the composition layer
+
+Every other layer is deliberately unable to reach the ones beside it: `features`
+and `models` cannot import `db` (a model must be retrainable offline with no
+server), `decision` cannot import either (it stays pure so the same inputs always
+produce the same action), and `api.routers` cannot import an ML library. Those
+constraints leave a gap — something has to assemble the pieces for a live
+request — and this package is it.
+
+```
+database row → OrderFeatureService → ModelRegistry → calibrator
+             → RiskScore → DecisionEngine → OrderAssessment
+```
+
+**`ModelRegistry` is a controlled loader, not a getter.** It verifies the
+artefact's SHA-256 before unpickling, refuses an artefact whose card says
+`calibration_method: null`, checks the card's feature fingerprint against the
+pipeline the server is actually running, and caches the result behind a lock so
+the served model is a stable, reportable version rather than whatever is on disk
+at that instant. A mismatch is a 409, not a wrong number.
+
+**`OrderFeatureService` reimplements nothing.** It reconstructs the *input frame*
+from the database in the shape the generator produced and hands it to the same
+`FeaturePipeline` training used. `test_serving_features_match_the_offline_pipeline`
+compares the served row against the offline one field by field, because a serving
+path that computes features slightly differently does not fail — the numbers just
+move, and the model quietly stops being the model that was evaluated.
+
+**The context frame is larger than one row, necessarily.** The feature families
+recompute customer history and geography aggregates from data, so a single order
+scored alone would look like a first-time customer in an unknown pincode. The
+service loads the merchant's book up to that order's `ordered_at` and lets the
+as-of machinery mask anything unresolved — safe precisely because that masking is
+what the leakage suite tests. It costs about a second per order on the benchmark
+and `docs/api.md` says so rather than hiding it.
+
 ### 3.10 API (`api/`)
 
 Handlers marshal and delegate. `test_no_ml_logic_in_route_handlers` asserts no
@@ -543,9 +579,13 @@ reviewer to verify that in a minute.
 | Merchant simulation service and its API | **Implemented and tested** |
 | Provenance taxonomy on every reported quantity | **Implemented and tested** |
 | Generated economic evaluation report | **Implemented and exercised** |
-| Serving-path repositories (single order, decisions) | Interfaces fixed — later |
+| Serving layer: model registry, feature service, assessment | **Implemented and tested** |
+| Serving repositories (orders, decision log, overrides) | **Implemented and tested** |
+| Orders, risk, decision, override, monitoring endpoints | **Implemented and tested** |
+| Evaluation endpoints reading frozen artefacts | **Implemented and tested** |
+| End-to-end integration test (database → model → decision) | **Implemented and passing** |
 | Console: queue, sliders, charts, fairness | Later |
-| Fairness audit by cohort | Contract fixed — not run |
+| Fairness audit by cohort | Contract fixed — **not run**, endpoint returns 501 |
 | Agent layer (4 jobs + grounding) | Interfaces fixed — Phase 6 |
 | Cohort/fairness audit execution | **Not run.** No fairness claim may be made until it is |
 | Drift monitoring, outcome loop | Interfaces fixed — Phase 6 |
@@ -577,7 +617,22 @@ cold-start customers in validation and test. Measured, not assumed: 43% versus
 87%. See §3.3 and `data/splits.py`.
 
 **501 rather than stubbed responses.** Discussed in §3.10. This is the decision
-most likely to make an early demo look worse and the project look honest.
+most likely to make an early demo look worse and the project look honest. Phase 7
+retired most of them by implementing the endpoints; the one that remains is
+`/v1/evaluation/fairness`, which returns 501 because the audit has genuinely never
+been run and a fabricated breakdown would be the most damaging fake in the API.
+
+**The API references orders, it does not ingest them.** There is no endpoint that
+accepts an arbitrary order object and scores it. Customer history and geography
+aggregates are computed from the merchant's book as of the order's own timestamp,
+so an unpersisted order has no history and would be scored as a first-time
+customer in an unknown pincode — confidently, and wrongly, every time. Ingestion
+is a separate concern and conflating the two is how a serving path starts lying.
+
+**The model is checked before the order is looked up.** On a server with no
+artefact both preconditions fail, and "no model is loaded" is the one an operator
+can act on; reporting "no such order" would send them hunting a data problem that
+is not there.
 
 **Provenance travels with the number, not in a footnote.** An economic report
 mixes measured metrics, merchant inputs, published figures, simulator parameters

@@ -51,3 +51,37 @@ def test_the_dictionary_records_the_fingerprint(
     committed = (repo_root / "docs" / "features.md").read_text(encoding="utf-8")
     feature_set = FeaturePipeline(features_config, generator_config).feature_set
     assert feature_set.fingerprint() in committed
+
+
+def test_every_feature_prefix_maps_to_its_family(features_config, generator_config) -> None:
+    """`FAMILY_BY_PREFIX` must agree with the live feature set, not with a memory.
+
+    A trained artefact carries feature *names* and not the FeatureSet that
+    produced them, so a model asked for attributions at serving time resolves the
+    family from the name alone. If that table drifts from reality, every reason
+    code silently loses its operational prefix - which is exactly what happened
+    before the serving path started using attributions.
+    """
+    from rto_sentinel.features.pipeline import FAMILY_BY_PREFIX, FeaturePipeline, family_of
+
+    pipeline = FeaturePipeline(features_config, generator_config=generator_config)
+
+    observed: dict[str, set[str]] = {}
+    for spec in pipeline.feature_set:
+        observed.setdefault(spec.name.split("_", 1)[0], set()).add(spec.family)
+
+    ambiguous = {prefix: sorted(f) for prefix, f in observed.items() if len(f) > 1}
+    assert not ambiguous, (
+        f"a feature-name prefix maps to more than one family, so the family cannot be "
+        f"recovered from a name: {ambiguous}"
+    )
+
+    for prefix, families in observed.items():
+        family = next(iter(families))
+        assert FAMILY_BY_PREFIX.get(prefix) == family, (
+            f"prefix {prefix!r} belongs to family {family!r} but the table says "
+            f"{FAMILY_BY_PREFIX.get(prefix)!r}"
+        )
+
+    for spec in pipeline.feature_set:
+        assert family_of(spec.name) == spec.family

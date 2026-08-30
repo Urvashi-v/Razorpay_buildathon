@@ -32,58 +32,44 @@ evaluation report object, and on the console — not only here.
 
 ---
 
-## Current status: Phase 6 of 6
+## Current status: Phase 7
 
 **Phase 1** established the architecture, **Phase 2** built the data layer,
-**Phase 3** built the feature pipeline and the leakage defences, **Phase 4** built
-and measured the baseline ladder, **Phase 5** produced the calibrated final model
-and evaluated it once on the sealed test set, and **Phase 6** turned calibrated
-probabilities into economically justified decisions. The following are
-implemented, tested, and working:
+**Phase 3** the feature pipeline and leakage defences, **Phase 4** the baseline
+ladder, **Phase 5** the calibrated final model and its one sealed-set evaluation,
+**Phase 6** the economic decision engine, and **Phase 7** the production-style
+backend that serves all of it. Implemented, tested and working:
 
 - A reproducible **benchmark generator** with a documented causal simulation
 - **PostgreSQL persistence**: 10 tables, Alembic migrations, bulk loader
-- **Data validation**: ten check groups, each one verified to actually fire
-- **As-of joins** with a brute-force reference implementation and a leakage guard
-- **Label maturity**: unresolved orders get a NULL label, never "delivered"
-- **Split protocol**: temporal windows inside disjoint customer pools, sealed test set
-- **Six feature families** behind a typed dataset contract, each independently
-  ablatable, each documenting its lookback and availability at scoring time
-- **Eleven leakage tests** running against real generated data
+- **Data validation**, **as-of joins**, **label maturity**, and a **split
+  protocol** with a sealed test set
+- **Six feature families** behind a typed dataset contract, with **eleven leakage
+  tests** running against real generated data
 - **The complete baseline ladder**, rungs 0–4, on identical footing
-- **A calibrated final model**: a capacity search selected by a one-standard-error
-  rule, then a calibration method chosen by cross-validation *inside* validation
-- **A frozen selection manifest** and a **single test-set evaluation**
+- **A calibrated final model**, selected by a one-standard-error rule and
+  calibrated by cross-validation inside validation, frozen to a manifest
 - **A deterministic economic decision engine**: cost-derived threshold, four-rung
-  friction ladder, stable reason codes, and a `Decision` type that cannot express
-  a silent hard block
-- **Portfolio economics** in two modes — expected (from probabilities alone, no
-  labels) and realized (from outcomes) — with the gap reported as a calibration
-  check
-- **A threshold sweep** whose contract *requires* it to state that the operating
-  point is derived from economics rather than read off the curve
-- **A merchant simulation service and API** that genuinely recalculates the
-  threshold, the band boundaries, every order's assignment and the rupee totals
-  server-side
-- **A provenance taxonomy** carried by every reported number, separating measured
-  metrics from merchant inputs, published figures, simulator parameters and
-  unmeasured intervention assumptions
-- **Generated reports**: [docs/model_card.md](docs/model_card.md) and
-  [docs/economics.md](docs/economics.md), neither ever hand-edited
-- A CLI covering generate / validate / migrate / seed / query / features / split /
-  train / evaluate / final / final-test / final-report / economics
-- FastAPI application with working health, threshold, simulation and sweep endpoints
-- A React console that reads live backend status
+  friction ladder, stable reason codes, no expressible silent hard block
+- **Portfolio economics** in expected and realized modes, a threshold sweep, and a
+  **merchant simulator** that recalculates server-side
+- **A production-style FastAPI backend** serving the real chain end to end:
+  database → feature pipeline → trained artefact → calibration → decision engine
+- **A controlled model-loading service** that verifies checksums and feature
+  fingerprints, refuses uncalibrated artefacts, and reports its version on every
+  response
+- **Append-only decision logging** with human overrides that require a reason
+- **Generated reports**: [docs/model_card.md](docs/model_card.md),
+  [docs/economics.md](docs/economics.md), [docs/ladder_results.md](docs/ladder_results.md)
+- **API documentation**: [docs/api.md](docs/api.md)
 
-**What is still not built.** The decision *serving* path (scoring a live order
-through the API), the console's queue and sliders, the agent layer, and the
-outcome loop. Those endpoints return `501 NOT_IMPLEMENTED` and their functions
-raise `NotImplementedError`. Nothing returns placeholder data. **The cohort and
-fairness audit has not been run**, so no fairness claim should be made.
+**What is still not built.** Order ingestion (the API references stored orders
+rather than accepting new ones — see [docs/api.md](docs/api.md) for why), the
+console's queue and sliders, the agent layer, and the outcome loop. **The cohort
+and fairness audit has not been run**, and `/v1/evaluation/fairness` returns 501
+saying so rather than a fabricated breakdown.
 
 Full breakdown: [ARCHITECTURE.md § Implementation status](ARCHITECTURE.md#8-implementation-status).
-Measured results: [docs/ladder_results.md](docs/ladder_results.md),
-[docs/model_card.md](docs/model_card.md) and [docs/economics.md](docs/economics.md).
 
 ---
 
@@ -213,11 +199,26 @@ Changing the margin re-derives the threshold, moves every band boundary with it,
 re-assigns every order, and re-prices the book — server-side. No economic
 arithmetic happens in the browser.
 
-### Run the API
+### Run the API and score a real order
 
 ```bash
 rto-sentinel serve
 ```
+
+```bash
+curl -s "localhost:8000/v1/orders/ORD-00008874/risk"
+```
+
+That single request runs the whole chain: it reads the order from PostgreSQL,
+rebuilds its features through the same pipeline that trained the model, loads the
+frozen artefact (verifying its checksum and feature fingerprint), applies the
+calibrator, and hands the calibrated probability to the deterministic decision
+engine. The response carries the probability, the derived threshold, the band, the
+action, the reason codes, the model and feature versions, and the economic
+assumptions the rupee figure rests on.
+
+With no model artefact present it returns **503**, not a score. Full reference and
+worked examples: [docs/api.md](docs/api.md).
 
 Then in a second terminal:
 
@@ -527,6 +528,7 @@ a key must be present.
 | [docs/ladder_results.md](docs/ladder_results.md) | **Measured baseline-ladder results.** Generated, never hand-written |
 | [docs/model_card.md](docs/model_card.md) | **The final model's card.** Intended use, limitations, fairness, drift, and every measured number |
 | [docs/economics.md](docs/economics.md) | **The economic evaluation.** Threshold derivation, the friction ladder, expected and realized rupees, sensitivity, and where every number came from |
+| [docs/api.md](docs/api.md) | **The API reference.** The inference chain, every endpoint, real request/response examples, and what the API refuses to do |
 | [REPORT.md](REPORT.md) | Final report — written once the system is complete |
 | [docs/sources.md](docs/sources.md) | Every market figure, with its citation |
 | [docs/adr/](docs/adr/) | Architecture decision records |

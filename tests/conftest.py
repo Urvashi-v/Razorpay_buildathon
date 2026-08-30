@@ -90,10 +90,36 @@ def _isolated_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[N
     monkeypatch.setenv("RTO_DATABASE_URL", f"sqlite+pysqlite:///{tmp_path / 'test.db'}")
     monkeypatch.setenv("RTO_AGENTS_ENABLED", "false")
     monkeypatch.setenv("RTO_CONFIG_DIR", str(REPO_ROOT / "config"))
+    # An EMPTY artefact store by default. Without this the suite reads whatever
+    # the developer last trained into `artifacts/`, so a test asserting "no model
+    # is loaded" would pass or fail depending on someone's local state - and,
+    # worse, a test asserting a score would pass against a model it never
+    # created. A test that needs an artefact builds one into a tmp_path and
+    # points RTO_ARTIFACT_DIR at it explicitly.
+    monkeypatch.setenv("RTO_ARTIFACT_DIR", str(tmp_path / "artifacts"))
 
     get_settings.cache_clear()
+
+    # Create the schema in the per-test SQLite file. Without it, any endpoint
+    # that touches the database fails on a missing table - which masks the thing
+    # a test was actually asserting. A test database with no schema is not a test
+    # database, it is a different failure wearing the same clothes.
+    _create_schema(get_settings().database.url)
+
     yield
     get_settings.cache_clear()
+
+
+def _create_schema(url: str) -> None:
+    from sqlalchemy import create_engine
+
+    from rto_sentinel.db.base import Base
+
+    engine = create_engine(url, future=True)
+    try:
+        Base.metadata.create_all(engine)
+    finally:
+        engine.dispose()
 
 
 @pytest.fixture

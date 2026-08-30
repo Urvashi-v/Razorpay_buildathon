@@ -18,6 +18,7 @@ the caller gets a code and a message written for them.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 from enum import StrEnum
 from typing import Any
@@ -26,6 +27,12 @@ from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+
+from rto_sentinel.decision.engine import UncalibratedScoreError
+from rto_sentinel.serving.features import FeatureServiceError
+from rto_sentinel.serving.model_registry import ModelMismatchError, ModelUnavailableError
+
+LOGGER = logging.getLogger(__name__)
 
 
 class ErrorCode(StrEnum):
@@ -158,4 +165,67 @@ def register_exception_handlers(app: FastAPI) -> None:
             # number is stable across every version we support.
             status_code=422,
             detail={"errors": sanitise_validation_errors(exc.errors())},
+        ).to_response()
+
+    # -- the serving path ------------------------------------------------
+    #
+    # Each of these is a *known* operational state with a specific meaning, and
+    # each carries its message through to the client verbatim. That is
+    # deliberate: "no calibrated model artefact exists, run `rto-sentinel final`"
+    # is information an operator needs, and none of these messages contains a
+    # path outside the artefact store, a credential, or a stack frame. Anything
+    # not enumerated here falls through to the generic 500 below, which reveals
+    # nothing.
+
+    @app.exception_handler(ModelUnavailableError)
+    async def _model_unavailable(_: Request, exc: ModelUnavailableError) -> JSONResponse:
+        return ApiError(
+            ErrorCode.MODEL_UNAVAILABLE,
+            str(exc),
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        ).to_response()
+
+    @app.exception_handler(ModelMismatchError)
+    async def _model_mismatch(_: Request, exc: ModelMismatchError) -> JSONResponse:
+        # 409, not 503: the service is up and a model is loaded. The deployment
+        # is internally inconsistent, which is a different problem needing a
+        # different response from whoever is paged.
+        return ApiError(
+            ErrorCode.MODEL_UNAVAILABLE,
+            str(exc),
+            status_code=status.HTTP_409_CONFLICT,
+        ).to_response()
+
+    @app.exception_handler(UncalibratedScoreError)
+    async def _uncalibrated(_: Request, exc: UncalibratedScoreError) -> JSONResponse:
+        return ApiError(
+            ErrorCode.UNCALIBRATED_SCORE,
+            str(exc),
+            status_code=status.HTTP_409_CONFLICT,
+        ).to_response()
+
+    @app.exception_handler(FeatureServiceError)
+    async def _feature_failure(_: Request, exc: FeatureServiceError) -> JSONResponse:
+        return ApiError(
+            ErrorCode.MODEL_UNAVAILABLE,
+            str(exc),
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        ).to_response()
+
+    @app.exception_handler(Exception)
+    async def _unhandled(request: Request, exc: Exception) -> JSONResponse:
+        """The catch-all. Logs everything, returns nothing.
+
+        The traceback goes to the server log where an operator can read it; the
+        client gets a code and a request path. A stack trace in an HTTP response
+        tells an attacker the framework, the file layout and often a query - and
+        it is the single easiest way for a connection string to end up in
+        somebody's browser console.
+        """
+        LOGGER.exception("unhandled error serving %s %s", request.method, request.url.path)
+        return ApiError(
+            ErrorCode.INTERNAL_ERROR,
+            "The server failed to handle this request. The failure has been logged.",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"path": request.url.path},
         ).to_response()

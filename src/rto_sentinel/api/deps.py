@@ -12,7 +12,9 @@ are the point of doing it this way:
 
 from __future__ import annotations
 
+import functools
 from collections.abc import Iterator
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import Depends, status
@@ -21,9 +23,21 @@ from sqlalchemy.orm import Session
 from rto_sentinel.agents.provider import LLMProvider, get_provider
 from rto_sentinel.api.errors import ApiError, ErrorCode
 from rto_sentinel.configuration import AppConfig, load_app_config
+from rto_sentinel.contracts.decision import CostInputs
+from rto_sentinel.db.repositories import (
+    DecisionLogRepository,
+    OpsOverrideRepository,
+    ServingRepository,
+)
 from rto_sentinel.db.session import get_session_factory
 from rto_sentinel.decision.engine import DecisionEngine
 from rto_sentinel.models.final import ScoredBook, load_scored_book
+from rto_sentinel.serving import (
+    AssessmentService,
+    ModelRegistry,
+    OrderFeatureService,
+    ScoringService,
+)
 from rto_sentinel.settings import Settings, get_settings
 
 
@@ -111,3 +125,119 @@ def llm_provider_dep(settings: SettingsDep) -> LLMProvider:
 
 
 LLMProviderDep = Annotated[LLMProvider, Depends(llm_provider_dep)]
+
+
+# ---------------------------------------------------------------------------
+# the serving path
+# ---------------------------------------------------------------------------
+
+
+@functools.lru_cache(maxsize=4)
+def _registry_for(artifact_root: Path) -> ModelRegistry:
+    """One registry per artefact root, for the life of the process.
+
+    Cached deliberately. The registry holds a deserialised booster; building one
+    per request would be slow and would make the served model a function of
+    whatever is on disk at that instant rather than a stable, reportable version.
+    The cache is keyed on the path so a test pointing at a temporary artefact
+    store gets its own registry instead of the production one.
+    """
+    return ModelRegistry(artifact_root)
+
+
+def model_registry_dep(settings: SettingsDep) -> ModelRegistry:
+    """The process-wide model registry. Never loads the artefact by itself."""
+    return _registry_for(settings.artifact_path)
+
+
+ModelRegistryDep = Annotated[ModelRegistry, Depends(model_registry_dep)]
+
+
+def serving_repository_dep(session: DbSession) -> ServingRepository:
+    return ServingRepository(session)
+
+
+ServingRepositoryDep = Annotated[ServingRepository, Depends(serving_repository_dep)]
+
+
+def decision_log_dep(session: DbSession) -> DecisionLogRepository:
+    return DecisionLogRepository(session)
+
+
+DecisionLogDep = Annotated[DecisionLogRepository, Depends(decision_log_dep)]
+
+
+def override_repository_dep(session: DbSession) -> OpsOverrideRepository:
+    return OpsOverrideRepository(session)
+
+
+OverrideRepositoryDep = Annotated[OpsOverrideRepository, Depends(override_repository_dep)]
+
+
+def feature_service_dep(
+    repository: ServingRepositoryDep, config: AppConfigDep, settings: SettingsDep
+) -> OrderFeatureService:
+    """The feature service, built from the same config the trainer used."""
+    return OrderFeatureService(
+        repository,
+        features_config=config.features,
+        generator_config=config.generator,
+        context_limit=settings.serving_context_limit,
+    )
+
+
+FeatureServiceDep = Annotated[OrderFeatureService, Depends(feature_service_dep)]
+
+
+def scoring_service_dep(registry: ModelRegistryDep, features: FeatureServiceDep) -> ScoringService:
+    return ScoringService(registry, features)
+
+
+ScoringServiceDep = Annotated[ScoringService, Depends(scoring_service_dep)]
+
+
+def cost_inputs_for(config: AppConfig, profile_key: str | None = None) -> tuple[CostInputs, str]:
+    """The merchant economics a request should use, and which profile they are.
+
+    Shared by every router that needs them so a handler cannot quietly assemble a
+    different set of cost inputs than the one the report was written against.
+    """
+    cost_model = config.cost_model
+    key = profile_key or cost_model.default_profile
+    profile = cost_model.profiles.get(key)
+    if profile is None:
+        raise ApiError(
+            ErrorCode.VALIDATION_FAILED,
+            f"unknown cost profile {key!r}",
+            detail={"available": sorted(cost_model.profiles)},
+        )
+    return (
+        CostInputs(
+            rto_cost_inr=profile.rto_cost_inr,
+            contribution_margin_inr=profile.contribution_margin_inr,
+            abandonment_on_friction=profile.abandonment_on_friction,
+            intervention_success_rate=profile.intervention_success_rate,
+            friction_support_cost_inr=profile.friction_support_cost_inr,
+        ),
+        key,
+    )
+
+
+def assessment_service_dep(
+    repository: ServingRepositoryDep,
+    scoring: ScoringServiceDep,
+    engine: DecisionEngineDep,
+    config: AppConfigDep,
+) -> AssessmentService:
+    """The whole chain, assembled. Route handlers call this and nothing else."""
+    cost_inputs, profile = cost_inputs_for(config)
+    return AssessmentService(
+        repository,
+        scoring,
+        engine,
+        default_cost_inputs=cost_inputs,
+        default_cost_profile=profile,
+    )
+
+
+AssessmentServiceDep = Annotated[AssessmentService, Depends(assessment_service_dep)]

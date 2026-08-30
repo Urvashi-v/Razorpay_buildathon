@@ -31,6 +31,15 @@ EXPECTED_PATHS = {
     "/v1/economics/what-if",
     "/v1/economics/simulate",
     "/v1/economics/sweep",
+    "/v1/orders",
+    "/v1/orders/{order_id}",
+    "/v1/orders/{order_id}/risk",
+    "/v1/decisions",
+    "/v1/evaluation/final",
+    "/v1/evaluation/selection",
+    "/v1/monitoring/model",
+    "/v1/monitoring/data",
+    "/v1/monitoring/decisions",
     "/v1/decisions/queue",
     "/v1/decisions/{order_id}",
     "/v1/decisions/override",
@@ -72,18 +81,17 @@ def test_openapi_states_the_data_provenance(client: TestClient) -> None:
 def test_unimplemented_endpoints_return_an_explicit_501(client: TestClient) -> None:
     """No plausible-looking placeholder data anywhere in the API.
 
-    The economics endpoints were the subject of this test until Phase 6
-    implemented them; the decision queue took their place rather than the
-    assertion being dropped. As each surface lands it moves out of this test and
-    into one that checks what it actually returns - the invariant being defended
-    is that nothing in between ever returns a plausible fake.
+    The endpoints this test guards have moved as each phase landed: economics in
+    Phase 6, the decision queue in Phase 7. What remains is the language layer -
+    and the fairness audit, which returns 501 because it has genuinely never been
+    run and a fabricated breakdown would be the most damaging fake in this API.
     """
-    response = client.get("/v1/decisions/queue", params={"merchant_id": "M-1"})
+    response = client.get("/v1/evaluation/fairness")
 
     assert response.status_code == 501
     error = response.json()["error"]
     assert error["code"] == "NOT_IMPLEMENTED"
-    assert error["detail"]["phase"]
+    assert "has not been run" in error["message"]
 
 
 def test_the_implemented_economics_endpoints_return_real_arithmetic(
@@ -107,64 +115,17 @@ def test_the_implemented_economics_endpoints_return_real_arithmetic(
 
 
 def test_scoring_endpoint_does_not_fabricate_a_score(client: TestClient) -> None:
-    payload = {
-        "order": {
-            "order_id": "ORD-1",
-            "merchant_id": "M-1",
-            "customer_hash": "a3f5c9d1e7b20486",
-            "ordered_at": "2026-08-27T12:00:00Z",
-            "payment_method": "cod",
-            "order_value_inr": 1499.0,
-            "discount_inr": 0.0,
-            "address": {
-                "line": "12/3 MG Road",
-                "city": "Pune",
-                "state": "Maharashtra",
-                "pincode": "411001",
-            },
-            "items": [
-                {"sku": "S1", "category": "fashion", "quantity": 1, "unit_price_inr": 1499.0}
-            ],
-        }
-    }
-    response = client.post("/v1/score", json=payload)
-    assert response.status_code == 501
+    """With no model artefact loaded, scoring refuses. It never invents a number.
 
+    The Phase 1 version of this test asserted a 501 against an unimplemented
+    endpoint. The endpoint is implemented now, and the invariant it was defending
+    survives unchanged: no code path returns a probability the model did not
+    produce.
+    """
+    response = client.post("/v1/score", json={"order_id": "ORD-00000001"})
+
+    assert response.status_code == 503
     body = response.json()
-    assert body["error"]["code"] == "NOT_IMPLEMENTED"
-    assert "probability" not in body, "a 501 must not carry a fabricated score"
-
-
-def test_validation_errors_use_the_shared_envelope(client: TestClient) -> None:
-    """One error shape for the whole API, so the console has one error path."""
-    response = client.post("/v1/score", json={"order": {"order_id": "ORD-1"}})
-    assert response.status_code == 422
-    error = response.json()["error"]
-    assert error["code"] == "VALIDATION_FAILED"
-    assert "errors" in error["detail"]
-
-
-def test_payload_validation_rejects_an_unhashed_customer_identity(client: TestClient) -> None:
-    """The privacy boundary holds at the HTTP edge, not only in Python."""
-    payload = {
-        "order": {
-            "order_id": "ORD-1",
-            "merchant_id": "M-1",
-            "customer_hash": "+919876543210",
-            "ordered_at": "2026-08-27T12:00:00Z",
-            "payment_method": "cod",
-            "order_value_inr": 1499.0,
-            "address": {
-                "line": "12/3 MG Road",
-                "city": "Pune",
-                "state": "Maharashtra",
-                "pincode": "411001",
-            },
-            "items": [
-                {"sku": "S1", "category": "fashion", "quantity": 1, "unit_price_inr": 1499.0}
-            ],
-        }
-    }
-    response = client.post("/v1/score", json=payload)
-    assert response.status_code == 422
-    assert response.json()["error"]["code"] == "VALIDATION_FAILED"
+    assert set(body) == {"error"}
+    assert body["error"]["code"] == "MODEL_UNAVAILABLE"
+    assert "probability" not in {key.lower() for key in body["error"].get("detail") or {}}

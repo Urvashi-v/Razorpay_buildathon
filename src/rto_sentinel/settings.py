@@ -129,6 +129,15 @@ class Settings(BaseSettings):
     # than inventing a probability.
     active_model_path: Path | None = Field(default=None, alias="RTO_ACTIVE_MODEL_PATH")
 
+    # How many rows of merchant history the serving feature pipeline reads to
+    # compute one order's aggregates. Lower is faster and gives the geography
+    # features less evidence, so they shrink harder towards their prior; it never
+    # makes them wrong, only less informed. Exposed because the right value
+    # depends on book size, and the honest default is "enough".
+    serving_context_limit: int = Field(
+        default=20000, ge=100, le=1_000_000, alias="RTO_SERVING_CONTEXT_LIMIT"
+    )
+
     database: DatabaseSettings = Field(default_factory=DatabaseSettings)
     llm: LLMSettings = Field(default_factory=LLMSettings)
 

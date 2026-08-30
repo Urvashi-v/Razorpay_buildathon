@@ -22,6 +22,8 @@ from rto_sentinel.api.routers import (
     evaluation,
     explanations,
     health,
+    monitoring,
+    orders,
     scoring,
 )
 from rto_sentinel.settings import Settings, get_settings
@@ -71,11 +73,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     register_exception_handlers(app)
 
     app.include_router(health.router)
+    app.include_router(orders.router)
     app.include_router(scoring.router)
     app.include_router(economics.router)
     app.include_router(decisions.router)
     app.include_router(evaluation.router)
     app.include_router(explanations.router)
+    app.include_router(monitoring.router)
 
     return app
 

@@ -171,6 +171,43 @@ def test_ml_layers_do_not_import_the_web_or_database_layer(source_root: Path) ->
         assert not found, f"Layer {layer!r} must not depend on the web or database layer: {found}"
 
 
+def test_the_serving_layer_composes_but_is_not_composed(source_root: Path) -> None:
+    """The composition layer may reach down; nothing above it may reach in.
+
+    ``serving`` exists to put the database, the feature pipeline, the model
+    artefact and the decision engine together for a live request - which is why
+    it is allowed to import all four when no other layer is. What it may not
+    import is ``api`` (composition must not depend on its caller, or the
+    pipeline becomes untestable without a server) or ``agents`` (a language
+    model has no path into a score, a threshold or an action).
+    """
+    found = _violations(
+        source_root,
+        "serving",
+        forbidden_internal=frozenset({"api", "agents"}),
+        forbidden_external=LLM_LIBRARIES | WEB_LIBRARIES,
+    )
+    assert not found, (
+        "The serving layer composes the pipeline; it must not depend on the web "
+        f"layer or on the language layer: {found}"
+    )
+
+
+def test_route_handlers_do_not_build_sql(source_root: Path) -> None:
+    """Queries live in repositories, so the same question has one answer.
+
+    A handler that assembles a query is a handler that will eventually assemble a
+    slightly different one for the same question, and the two will disagree in a
+    way nobody notices until the numbers do.
+    """
+    found = _violations(
+        source_root,
+        "api.routers",
+        forbidden_external=frozenset({"psycopg", "psycopg2", "alembic"}),
+    )
+    assert not found, f"route handlers must not reach for a database driver: {found}"
+
+
 def test_contracts_depend_on_nothing_but_contracts(source_root: Path) -> None:
     """Shared types are the base of the graph and must import nothing above them."""
     found = _violations(
