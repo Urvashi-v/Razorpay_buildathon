@@ -38,6 +38,7 @@ from rto_sentinel.serving import (
     OrderFeatureService,
     ScoringService,
 )
+from rto_sentinel.serving.agent_tools import ApplicationToolset
 from rto_sentinel.settings import Settings, get_settings
 
 
@@ -113,6 +114,23 @@ def scored_book_dep(settings: SettingsDep) -> ScoredBook:
 
 
 ScoredBookDep = Annotated[ScoredBook, Depends(scored_book_dep)]
+
+
+def agent_toolset_dep(
+    repository: ServingRepositoryDep,
+    assessments: AssessmentServiceDep,
+    session: DbSession,
+) -> ApplicationToolset:
+    """The read-only tools an agent is handed.
+
+    Constructed per request so its per-order assessment cache lives exactly as
+    long as one agent run. An agent has no other route to data: it cannot import
+    a repository, and the layering tests assert that it never will.
+    """
+    return ApplicationToolset(repository, assessments, session)
+
+
+AgentToolsetDep = Annotated[ApplicationToolset, Depends(agent_toolset_dep)]
 
 
 def llm_provider_dep(settings: SettingsDep) -> LLMProvider:

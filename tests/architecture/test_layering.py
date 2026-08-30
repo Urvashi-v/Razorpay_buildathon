@@ -148,6 +148,40 @@ def test_agents_cannot_reach_the_decision_engine_or_models(source_root: Path) ->
 # ---------------------------------------------------------------------------
 
 
+def test_the_agent_layer_holds_no_write_capability(source_root: Path) -> None:
+    """Agents describe decisions. They cannot reach anything that changes one.
+
+    The import ban in `test_agents_cannot_reach_the_decision_engine_or_models` is
+    the first half. This is the second: even the names the package mentions must
+    not include a write path, because a toolset is only as read-only as the
+    methods it can reach for.
+
+    `.append(` is deliberately NOT on this list. Python lists have that method
+    and the agent package builds lists everywhere, so matching it produces four
+    false positives and no true one - a check that has to be ignored to pass is
+    worse than no check.
+    """
+    banned = (
+        "DecisionLogRepository",
+        "OpsOverrideRepository",
+        "DatasetRepository",
+        "ServingRepository",
+        "session_scope",
+        ".commit(",
+        ".flush(",
+        "session.add(",
+    )
+    offenders: list[str] = []
+    for path in (source_root / "agents").glob("*.py"):
+        source = path.read_text(encoding="utf-8")
+        offenders += [f"{path.name}: {name}" for name in banned if name in source]
+
+    assert not offenders, (
+        "the agent package must not name a write-capable repository or a session "
+        f"mutation: {offenders}"
+    )
+
+
 def test_no_ml_logic_in_route_handlers(source_root: Path) -> None:
     """Routers marshal and delegate. ML belongs in the pipeline, not in a handler."""
     found = _violations(source_root, "api.routers", forbidden_external=ML_LIBRARIES)
@@ -171,6 +205,39 @@ def test_ml_layers_do_not_import_the_web_or_database_layer(source_root: Path) ->
         assert not found, f"Layer {layer!r} must not depend on the web or database layer: {found}"
 
 
+#: Modules in `agents` that are pure contract - schemas and record types with no
+#: behaviour, no I/O and no provider. `serving` implements the tool interface, so
+#: it must import these; importing them gives a language model no path to
+#: anything, because there is nothing behind them to reach.
+AGENT_CONTRACT_MODULES = frozenset({"tools", "audit"})
+
+
+def test_the_agent_contract_modules_really_are_contract_only(source_root: Path) -> None:
+    """The exemption below is only safe if these modules hold no behaviour.
+
+    Checked rather than asserted: if someone puts a provider call or a database
+    query into `agents/tools.py`, the exemption that lets `serving` import it
+    stops being harmless and this test fails first.
+    """
+    offenders: list[str] = []
+    for name in sorted(AGENT_CONTRACT_MODULES):
+        path = source_root / "agents" / f"{name}.py"
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for imported in _imported_names(tree):
+            top = _top_level(imported)
+            if top in LLM_LIBRARIES | DB_LIBRARIES | WEB_LIBRARIES | ML_LIBRARIES:
+                offenders.append(f"{name}.py imports {imported}")
+            if imported.startswith("rto_sentinel."):
+                sub = imported.removeprefix("rto_sentinel.").split(".", 1)[0]
+                if sub not in {"contracts", "agents"}:
+                    offenders.append(f"{name}.py imports rto_sentinel.{sub}")
+
+    assert not offenders, (
+        "agents.tools and agents.audit must stay pure contract, because `serving` is "
+        f"allowed to import them: {offenders}"
+    )
+
+
 def test_the_serving_layer_composes_but_is_not_composed(source_root: Path) -> None:
     """The composition layer may reach down; nothing above it may reach in.
 
@@ -178,18 +245,41 @@ def test_the_serving_layer_composes_but_is_not_composed(source_root: Path) -> No
     artefact and the decision engine together for a live request - which is why
     it is allowed to import all four when no other layer is. What it may not
     import is ``api`` (composition must not depend on its caller, or the
-    pipeline becomes untestable without a server) or ``agents`` (a language
-    model has no path into a score, a threshold or an action).
+    pipeline becomes untestable without a server).
+
+    THE ONE EXCEPTION, AND WHY IT IS NARROW
+    ---------------------------------------
+    ``serving.agent_tools`` implements the tool interface the agent layer
+    declares, so it imports ``agents.tools`` and ``agents.audit``. That is the
+    implementation depending on its interface, which is the right direction and
+    the only one available: the agent package is forbidden from importing the
+    decision engine, so it cannot build its own toolset.
+
+    What ``serving`` may still not import is an agent *job* - the investigator,
+    the writers, or the provider. Composing an agent is the API's business.
+    Without that half of the rule, "serving may import agents" would quietly
+    permit the composition layer to start running language models.
     """
     found = _violations(
         source_root,
         "serving",
-        forbidden_internal=frozenset({"api", "agents"}),
+        forbidden_internal=frozenset({"api"}),
         forbidden_external=LLM_LIBRARIES | WEB_LIBRARIES,
     )
+
+    forbidden_agent_modules = ("investigator", "confirmation_writer", "digest_writer", "provider")
+    for path, tree in _iter_modules(source_root):
+        if _layer_of(path, source_root) != "serving":
+            continue
+        for imported in _imported_names(tree):
+            if imported.startswith("rto_sentinel.agents."):
+                module = imported.removeprefix("rto_sentinel.agents.").split(".", 1)[0]
+                if module in forbidden_agent_modules:
+                    found.append(f"{path.name} imports an agent job: {imported}")
+
     assert not found, (
         "The serving layer composes the pipeline; it must not depend on the web "
-        f"layer or on the language layer: {found}"
+        f"layer, or run a language model itself: {found}"
     )
 
 

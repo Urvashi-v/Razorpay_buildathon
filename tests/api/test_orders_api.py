@@ -320,3 +320,51 @@ def test_reason_codes_round_trip_through_the_text_column() -> None:
     ]
     assert split_reason_codes("") == []
     assert split_reason_codes(None) == []
+
+
+# ---------------------------------------------------------------------------
+# the agent layer, with no language provider configured
+# ---------------------------------------------------------------------------
+
+
+def test_agent_status_reports_what_is_missing(client: TestClient) -> None:
+    """The endpoint that answers "is the language layer on" must not need it on."""
+    body = client.get("/v1/explanations/status").json()
+
+    assert body["available"] is False
+    assert body["reason"]
+    assert body["provider"] == "anthropic"
+    assert body["required_environment_variable"] == "ANTHROPIC_API_KEY"
+    assert body["enable_switch"] == "RTO_AGENTS_ENABLED"
+    assert len(body["tools"]) == 6
+    assert "does not depend on this layer" in body["note"]
+
+
+def test_the_tool_catalogue_is_published(client: TestClient) -> None:
+    """ "The agents are read-only" is a claim; this is the list to check it against."""
+    tools = client.get("/v1/explanations/tools").json()
+
+    assert len(tools) == 6
+    for tool in tools:
+        assert tool["name"].startswith("get_")
+        assert "Read-only" in tool["permission"]
+        assert tool["input_schema"]["type"] == "object"
+
+
+def test_investigation_refuses_without_a_provider(client: TestClient, any_order_id: str) -> None:
+    """503 with the reason. Never a substituted explanation."""
+    response = client.post(f"/v1/explanations/{any_order_id}/investigate")
+
+    assert response.status_code == 503
+    error = response.json()["error"]
+    assert error["code"] == "AGENT_UNAVAILABLE"
+    assert "unaffected" in error["message"]
+
+
+def test_address_repair_is_deferred_with_its_reasons(client: TestClient) -> None:
+    response = client.post("/v1/explanations/address-repair", params={"order_id": "ORD-00000001"})
+
+    assert response.status_code == 501
+    message = response.json()["error"]["message"]
+    assert "synthetic" in message
+    assert "postal reference" in message

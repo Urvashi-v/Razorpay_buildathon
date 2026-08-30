@@ -28,42 +28,99 @@ THE FOUR JOBS
 1. :mod:`~rto_sentinel.agents.reason_code_writer` - phrase SHAP reason codes.
 2. :mod:`~rto_sentinel.agents.confirmation_writer` - draft customer confirmations.
 3. :mod:`~rto_sentinel.agents.digest_writer` - prose around SQL-computed figures.
-4. :mod:`~rto_sentinel.agents.address_repair` - suggest an address correction.
+4. :mod:`~rto_sentinel.agents.investigator` - the risk investigation agent, which
+   runs a real tool loop over read-only application tools.
+
+:mod:`~rto_sentinel.agents.address_repair` is DEFERRED, with the reasons written
+out in that module rather than a stub that fabricates a correction.
 """
 
-from rto_sentinel.agents.address_repair import suggest_repair
-from rto_sentinel.agents.confirmation_writer import draft_confirmation
-from rto_sentinel.agents.digest_writer import write_digest
+from rto_sentinel.agents.address_repair import (
+    DEFERRAL_REASON,
+    AddressRepairDeferred,
+    suggest_address_repair,
+)
+from rto_sentinel.agents.audit import (
+    AgentAuditRecord,
+    AuditBuilder,
+    AuditLog,
+    ToolInvocation,
+)
+from rto_sentinel.agents.confirmation_writer import ConfirmationWriter
+from rto_sentinel.agents.digest_writer import DigestWriter
 from rto_sentinel.agents.grounding import (
+    ACCUSATORY_TERMS,
+    FABRICATED_DRIVERS,
     GroundingVerdict,
+    validate_evidence_references,
     validate_feature_grounding,
     validate_figure_grounding,
     validate_neutral_framing,
 )
+from rto_sentinel.agents.investigator import (
+    InvestigationError,
+    RiskInvestigation,
+    RiskInvestigationAgent,
+)
 from rto_sentinel.agents.provider import (
+    API_KEY_VARIABLE,
+    ENABLE_VARIABLE,
     AgentUnavailableError,
     AnthropicProvider,
+    Completion,
     LLMProvider,
+    ToolCall,
     UnavailableProvider,
     get_provider,
 )
 from rto_sentinel.agents.reason_code_writer import write_explanation
-from rto_sentinel.agents.tools import AgentToolset, DigestFigures
+from rto_sentinel.agents.tools import (
+    TOOL_SPECS,
+    TOOLS_BY_NAME,
+    AgentToolset,
+    CustomerHistoryRef,
+    DigestRef,
+    OrderRef,
+    ToolSpec,
+    anthropic_tool_definitions,
+)
 
 __all__ = [
+    "ACCUSATORY_TERMS",
+    "API_KEY_VARIABLE",
+    "DEFERRAL_REASON",
+    "ENABLE_VARIABLE",
+    "FABRICATED_DRIVERS",
+    "TOOLS_BY_NAME",
+    "TOOL_SPECS",
+    "AddressRepairDeferred",
+    "AgentAuditRecord",
     "AgentToolset",
     "AgentUnavailableError",
     "AnthropicProvider",
-    "DigestFigures",
+    "AuditBuilder",
+    "AuditLog",
+    "Completion",
+    "ConfirmationWriter",
+    "CustomerHistoryRef",
+    "DigestRef",
+    "DigestWriter",
     "GroundingVerdict",
+    "InvestigationError",
     "LLMProvider",
+    "OrderRef",
+    "RiskInvestigation",
+    "RiskInvestigationAgent",
+    "ToolCall",
+    "ToolInvocation",
+    "ToolSpec",
     "UnavailableProvider",
-    "draft_confirmation",
+    "anthropic_tool_definitions",
     "get_provider",
-    "suggest_repair",
+    "suggest_address_repair",
+    "validate_evidence_references",
     "validate_feature_grounding",
     "validate_figure_grounding",
     "validate_neutral_framing",
-    "write_digest",
     "write_explanation",
 ]

@@ -24,11 +24,16 @@ STATUS: Phase 5.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
+
+from rto_sentinel.agents.grounding import validate_feature_grounding
+from rto_sentinel.agents.provider import AgentUnavailableError
+from rto_sentinel.contracts.explanation import Explanation
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from rto_sentinel.agents.provider import LLMProvider
-    from rto_sentinel.contracts.explanation import Explanation, ReasonCode
+    from rto_sentinel.contracts.explanation import ReasonCode
 
 SYSTEM_PROMPT = """You describe, in one sentence, why an order was given extra \
 delivery friction by a risk system.
@@ -53,4 +58,53 @@ def write_explanation(
     sentence. It does not raise on rejection, because a missing sentence is a
     display concern, not an error the ops queue should see as a failure.
     """
-    raise NotImplementedError("Reason-code phrasing lands in Phase 5.")
+    permitted = tuple(code.feature for code in reason_codes)
+    if not reason_codes:
+        return Explanation(
+            generated_at=datetime.now(UTC),
+            llm_model="none",
+            grounded=False,
+            rejection_reason=(
+                "no reason codes were derived for this order, so there is nothing to "
+                "phrase. The decision stands; it simply has no per-feature account."
+            ),
+            order_id=order_id,
+            sentence="",
+            reason_codes=(),
+            permitted_features=(),
+        )
+
+    listing = "\n".join(
+        f"  {code.feature} ({code.family}): contribution {code.contribution:+.3f}"
+        for code in reason_codes
+    )
+    try:
+        sentence = provider.complete(
+            system=SYSTEM_PROMPT,
+            prompt=f"Order {order_id}. Features that raised this order's risk:\n{listing}",
+        ).strip()
+    except AgentUnavailableError as error:
+        return Explanation(
+            generated_at=datetime.now(UTC),
+            llm_model="none",
+            grounded=False,
+            rejection_reason=error.reason,
+            order_id=order_id,
+            sentence="",
+            reason_codes=reason_codes,
+            permitted_features=permitted,
+        )
+
+    verdict = validate_feature_grounding(sentence, permitted)
+    return Explanation(
+        generated_at=datetime.now(UTC),
+        llm_model=provider.model,
+        grounded=verdict.grounded,
+        rejection_reason=verdict.rejection_reason,
+        order_id=order_id,
+        # A rejected sentence is not returned at all. Showing it beside a
+        # "grounded: false" flag invites someone to read it anyway.
+        sentence=sentence[:500] if verdict.grounded else "",
+        reason_codes=reason_codes,
+        permitted_features=permitted,
+    )

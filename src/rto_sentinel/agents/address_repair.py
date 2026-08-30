@@ -1,63 +1,87 @@
-"""Language job 4 of 4: suggest a repair for a low-quality address.
+"""Address repair suggestions: DEFERRED, deliberately and with reasons.
 
-SPEC section 08.
+STATUS: not implemented. This module raises, and that is the finished state of
+it for now rather than a gap someone forgot to fill.
 
-WHAT IT DOES
-    Proposes a corrected address for low-quality inputs, shown to the customer
-    for confirmation at checkout.
+WHY IT IS NOT BUILT
+===================
+The Phase 8 brief says to implement this "only if it can be implemented safely
+and with actual data/logic. Otherwise explicitly defer it rather than producing a
+fake feature." It cannot, for three separate reasons, any one of which would be
+enough.
 
-THE GUARDRAIL
-    ALWAYS a suggestion the customer accepts or rejects. It never silently
-    rewrites a delivery address. There is no code path in this module, or in the
-    API, that applies a suggestion without an explicit customer action - which is
-    why :class:`~rto_sentinel.contracts.explanation.AddressRepairSuggestion` has
-    no "applied" field for this module to set.
+**1. There is no address to repair.** The generator produces address *strings*
+and the derived quality signals computed from them, but those strings are
+synthetic - assembled from a small vocabulary of road names and localities. A
+suggestion engine trained or prompted on them would be repairing text that has no
+relationship to how Indian addresses are actually written, and its apparent
+accuracy would be a measurement of the generator, not of anything useful.
 
-WHY THIS IS THE MOST USEFUL OF THE FOUR
-    Address quality is one of the strongest honest signals in the model and,
-    unlike most risk features, it is *fixable at the point of sale*. A customer
-    who adds a missing house number converts a HIGH-band order into a LOW-band
-    one and gets their package. That is a better outcome than any friction rung,
-    and it is the one place the language layer can reduce the number of orders
-    needing an intervention at all rather than just explaining the ones that do.
+**2. The agent layer is deliberately denied the address text.**
+``serving.agent_tools`` returns ``addr_token_count``, whether a house number is
+present, whether the pincode matches the city - never the line itself. That was a
+privacy decision made on purpose: handing raw delivery addresses to a language
+model that also drafts customer-facing copy is how an address ends up quoted back
+at somebody. Implementing repair would mean reversing it, and the reason for it
+has not changed.
 
-STATUS: Phase 5.
+**3. Correctness would need a source this project does not have.** A real address
+suggester validates against a postal database - India Post's PIN directory, or a
+commercial geocoder. Without one, the model can only guess at what a malformed
+address *meant*, and a confidently wrong "corrected" address is worse than a
+flagged incomplete one: it routes a parcel to a place nobody lives while looking
+like a fix.
+
+WHAT WOULD MAKE IT BUILDABLE
+============================
+Real merchant addresses (with the consent and handling that implies), a postal
+reference dataset to validate against, and a measurement of suggestion accuracy
+against accepted-versus-rejected outcomes. Until all three exist, the honest
+product is the one already shipping: the address-quality features feed the model,
+a low completeness score contributes to the risk score, and the customer is asked
+to confirm their own address rather than having it rewritten for them.
+
+That last part is not a lesser feature. Nothing in this system silently rewrites
+a delivery address, which is why
+:class:`~rto_sentinel.contracts.explanation.AddressRepairSuggestion` has no
+"applied" field: acceptance would always be the customer's action.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NoReturn
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
-    from rto_sentinel.agents.provider import LLMProvider
     from rto_sentinel.contracts.explanation import AddressRepairSuggestion
 
-SYSTEM_PROMPT = """You help a customer complete an incomplete Indian delivery \
-address at checkout.
+#: Quoted by the API so a caller reads the reason rather than a bare 501.
+DEFERRAL_REASON = (
+    "Address repair suggestions are deliberately not implemented. Three reasons, each "
+    "sufficient on its own: (1) the addresses in this benchmark are synthetic strings, so "
+    "any suggester would be repairing text unrelated to real Indian addresses; (2) the "
+    "agent layer is denied raw address text by design, because a model that drafts "
+    "customer-facing copy should not hold delivery addresses; (3) correctness needs a "
+    "postal reference dataset this project does not have, and a confidently wrong "
+    "'corrected' address is worse than a flagged incomplete one. The shipped behaviour is "
+    "to ask the customer to confirm their own address - nothing here rewrites one."
+)
 
-You will be given the address as entered, plus the city, state and PIN code. \
-Suggest a clearer version that keeps every detail the customer provided and adds \
-structure only where something is plainly missing, such as a house or flat \
-number placeholder or a landmark slot. Never invent a house number, a street \
-name, a locality, or any detail the customer did not supply. Never change the \
-PIN code. If the address is already adequate, say so and suggest nothing."""
+
+class AddressRepairDeferred(NotImplementedError):
+    """Raised on any attempt to use the deferred address-repair feature."""
 
 
-def suggest_repair(
-    provider: LLMProvider,
-    *,
-    order_id: str,
-    original_line: str,
-    city: str,
-    state: str,
-    pincode: str,
-) -> AddressRepairSuggestion:
-    """Propose a clearer address for the customer to accept or reject.
+def suggest_address_repair(*args: object, **kwargs: object) -> NoReturn:
+    """Refuse, with the reason. See the module docstring.
 
-    The Phase 5 implementation verifies that the suggestion contains no invented
-    tokens - every substantive token in the suggestion must appear in the input
-    or be a structural placeholder - before returning ``grounded=True``. A
-    fabricated street name would be worse than no suggestion: it produces a
-    confident-looking address that does not exist.
+    Deliberately not a stub that returns a plausible suggestion. A fake repair
+    would be indistinguishable from a real one to every caller, and the first
+    time anyone relied on it would be the last time anyone trusted the rest.
     """
-    raise NotImplementedError("Address repair suggestion lands in Phase 5.")
+    raise AddressRepairDeferred(DEFERRAL_REASON)
+
+
+__all__ = ["DEFERRAL_REASON", "AddressRepairDeferred", "suggest_address_repair"]
+
+if TYPE_CHECKING:  # pragma: no cover - keeps the contract import meaningful
+    _: type[AddressRepairSuggestion]
