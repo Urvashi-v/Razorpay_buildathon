@@ -25,8 +25,9 @@ from fastapi import APIRouter, Response, status
 from pydantic import BaseModel, Field
 
 from rto_sentinel import __version__
-from rto_sentinel.api.deps import SettingsDep
+from rto_sentinel.api.deps import ModelRegistryDep, SettingsDep
 from rto_sentinel.configuration import ConfigurationError, config_fingerprint, load_app_config
+from rto_sentinel.serving.model_registry import ModelUnavailableError
 
 router = APIRouter(tags=["health"])
 
@@ -62,7 +63,9 @@ def health(settings: SettingsDep) -> HealthResponse:
 
 
 @router.get("/readiness", response_model=ReadinessResponse, summary="Readiness probe")
-def readiness(settings: SettingsDep, response: Response) -> ReadinessResponse:
+def readiness(
+    settings: SettingsDep, registry: ModelRegistryDep, response: Response
+) -> ReadinessResponse:
     """Can this instance score an order, and what is degraded if not."""
     components: dict[str, ComponentStatus] = {}
     warnings: list[str] = []
@@ -81,21 +84,30 @@ def readiness(settings: SettingsDep, response: Response) -> ReadinessResponse:
     # --- model artefact -------------------------------------------------
     # No model means this instance cannot score. It reports that plainly rather
     # than accepting traffic and returning a default probability.
-    model_path = settings.active_model_path
-    if model_path is None:
+    #
+    # This asks the registry - the same object the scoring path uses - which
+    # artefact it would serve, rather than re-deriving the answer here. An
+    # earlier version checked `RTO_ACTIVE_MODEL_PATH` directly and reported the
+    # instance unready whenever the pin was unset, while scoring worked fine off
+    # the newest artefact in the store. A readiness probe that disagrees with
+    # the code path it is reporting on is worse than no probe: it drains a
+    # healthy instance out of the load balancer.
+    #
+    # `resolve` reads card JSON only, so this stays cheap enough to poll.
+    try:
+        artefact, card = registry.resolve()
+    except ModelUnavailableError as exc:
+        components["model"] = ComponentStatus(ready=False, detail=str(exc))
+    else:
+        pin = " (pinned)" if settings.active_model_path is not None else " (newest in store)"
+        loaded = " and loaded" if registry.is_loaded else ""
         components["model"] = ComponentStatus(
-            ready=False,
+            ready=True,
             detail=(
-                "No model artefact configured (RTO_ACTIVE_MODEL_PATH is unset). "
-                "Scoring is unavailable; the service will not invent a probability."
+                f"{card.model_name} {card.model_version}{pin}, calibration "
+                f"{card.calibration_method}, resolved{loaded} from {artefact.name}"
             ),
         )
-    elif not settings.resolve(model_path).is_file():
-        components["model"] = ComponentStatus(
-            ready=False, detail=f"Configured model artefact not found: {model_path}"
-        )
-    else:
-        components["model"] = ComponentStatus(ready=True, detail=f"Loaded from {model_path}")
 
     # --- database -------------------------------------------------------
     # Configuration only: no connection is opened here. A liveness or readiness

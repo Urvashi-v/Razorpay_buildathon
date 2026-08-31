@@ -36,7 +36,9 @@ import threading
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from rto_sentinel.models.artifacts import ArtifactError, list_artifacts
+from pydantic import ValidationError
+
+from rto_sentinel.models.artifacts import CARD_FILE, ArtifactError, list_artifacts, read_card
 from rto_sentinel.models.calibrated import CalibratedModel
 from rto_sentinel.models.final import load_manifest
 
@@ -111,9 +113,16 @@ class LoadedModel:
 class ModelRegistry:
     """Loads and holds the servable artefact. Thread-safe, cached, verifiable."""
 
-    def __init__(self, artifact_root: Path, *, require_calibration: bool = True) -> None:
+    def __init__(
+        self,
+        artifact_root: Path,
+        *,
+        require_calibration: bool = True,
+        pinned: Path | None = None,
+    ) -> None:
         self._artifact_root = artifact_root
         self._require_calibration = require_calibration
+        self._pinned = pinned
         self._loaded: LoadedModel | None = None
         self._lock = threading.Lock()
 
@@ -135,8 +144,54 @@ class ModelRegistry:
                 self._loaded = self._load_uncached()
         return self._loaded
 
+    def resolve(self) -> tuple[Path, ModelCard]:
+        """The artefact this registry would serve, without deserialising it.
+
+        Reads card JSON only, so a readiness probe can ask the *same* question
+        the scoring path asks without paying to load a booster. Every reason
+        scoring would refuse to start - nothing in the store, nothing
+        calibrated, a pin that points nowhere - is raised here too.
+
+        Keeping one resolution function is the point. When readiness had its own
+        copy of this logic it reported the service unready while scoring worked
+        perfectly, because the two disagreed about where the model comes from.
+        """
+        if self._pinned is not None:
+            return self._resolve_pinned(self._pinned)
+        return self._newest_calibrated_artifact()
+
+    def _resolve_pinned(self, pinned: Path) -> tuple[Path, ModelCard]:
+        """Honour an explicit artefact pin, or refuse.
+
+        A pin is a deployment saying "serve exactly this version". Falling back
+        to the newest artefact when the pin is unreadable would silently serve a
+        different model than the operator asked for, which is the failure the
+        pin exists to prevent.
+        """
+        if not pinned.is_dir() or not (pinned / CARD_FILE).is_file():
+            msg = (
+                f"the pinned model artefact {pinned} is not a readable artefact directory "
+                f"(no {CARD_FILE}). The pin is honoured or the service refuses to score; "
+                "it does not quietly fall back to a different version."
+            )
+            raise ModelUnavailableError(msg)
+        try:
+            card = read_card(pinned)
+        except (ArtifactError, OSError, ValueError, ValidationError) as error:
+            msg = f"the pinned model artefact {pinned} has an unreadable card: {error}"
+            raise ModelUnavailableError(msg) from error
+
+        if self._require_calibration and not card.calibration_method:
+            msg = (
+                f"the pinned artefact at {pinned} is uncalibrated (calibration_method is "
+                "null). An uncalibrated probability compared against an expected-value "
+                "threshold produces rupee figures that are fiction, so it is refused."
+            )
+            raise ModelUnavailableError(msg)
+        return pinned, card
+
     def _load_uncached(self) -> LoadedModel:
-        candidate = self._newest_calibrated_artifact()
+        candidate, _ = self.resolve()
         try:
             model, card = CalibratedModel.load(candidate)
         except ArtifactError as error:
@@ -167,7 +222,7 @@ class ModelRegistry:
 
         return LoadedModel(model=model, card=card, manifest=manifest, artifact_path=candidate)
 
-    def _newest_calibrated_artifact(self) -> Path:
+    def _newest_calibrated_artifact(self) -> tuple[Path, ModelCard]:
         """The most recently trained calibrated artefact under the root."""
         try:
             found = list_artifacts(self._artifact_root)
@@ -196,7 +251,7 @@ class ModelRegistry:
             raise ModelUnavailableError(msg)
 
         # `list_artifacts` returns newest first by `trained_at`.
-        return servable[0][0]
+        return servable[0]
 
     # ------------------------------------------------------------------
     # verification and introspection

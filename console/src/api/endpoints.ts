@@ -4,27 +4,43 @@
  * One function per endpoint, so a component names what it wants rather than
  * assembling a URL. When an endpoint changes, exactly one place here changes.
  *
- * Endpoints marked "Phase N" currently return 501 from the backend. They are
- * declared now because the contract is fixed and published in OpenAPI, so the
- * console can be built against a real schema. They are NOT stubbed with fake
- * data here - a call to one of them throws `ApiError('NOT_IMPLEMENTED')`, which
- * the UI surfaces plainly.
+ * There are no fixtures in this file and no fallbacks. Every function either
+ * returns what the backend sent or throws `ApiError` with the backend's own
+ * code, which the UI renders as the failure it is.
  */
 
 import { get, post, request } from '@/api/client';
 import type {
+  AgentStatusResponse,
   CostInputs,
-  EvaluationReport,
-  Explanation,
-  FairnessAudit,
+  DataStatusResponse,
+  DecisionStatusResponse,
+  FinalModelResponse,
   HealthResponse,
+  InvestigationResponse,
+  LadderResponse,
+  ModelStatusResponse,
+  OrderPageResponse,
+  OrderSummary,
+  ProfilesResponse,
   ReadinessResponse,
-  ScoreResponse,
+  RiskAssessmentResponse,
+  SimulationResult,
   ThresholdDerivation,
-  WhatIfResponse,
+  ToolCatalogueEntry,
 } from '@/types/api';
 
-// --- health (implemented) ----------------------------------------------------
+/** Build a query string, dropping anything unset. */
+type QueryValue = string | number | boolean | undefined;
+
+function query(params: Readonly<Record<string, QueryValue>>): string {
+  const parts = Object.entries(params)
+    .filter(([, value]) => value !== undefined && value !== '')
+    .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`);
+  return parts.length > 0 ? `?${parts.join('&')}` : '';
+}
+
+// --- health ------------------------------------------------------------------
 
 export const fetchHealth = (signal?: AbortSignal): Promise<HealthResponse> =>
   get<HealthResponse>('/health', signal);
@@ -43,41 +59,146 @@ export const fetchReadiness = (signal?: AbortSignal): Promise<ReadinessResponse>
     ...(signal ? { signal } : {}),
   });
 
-// --- economics (Phase 2) -----------------------------------------------------
+// --- orders ------------------------------------------------------------------
+
+export interface OrderFilters {
+  [key: string]: QueryValue;
+  merchant_id?: string;
+  customer_hash?: string;
+  split?: string;
+  payment_method?: string;
+  dataset_run?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export const fetchOrders = (
+  filters: OrderFilters = {},
+  signal?: AbortSignal,
+): Promise<OrderPageResponse> => get<OrderPageResponse>(`/v1/orders${query(filters)}`, signal);
+
+export const fetchOrder = (
+  orderId: string,
+  datasetRun?: string,
+  signal?: AbortSignal,
+): Promise<OrderSummary> =>
+  get<OrderSummary>(
+    `/v1/orders/${encodeURIComponent(orderId)}${query({ dataset_run: datasetRun })}`,
+    signal,
+  );
+
+/**
+ * The full assessment for one order.
+ *
+ * This is the call that runs the entire chain server-side: database row ->
+ * feature pipeline -> trained model -> calibrator -> decision engine. It is slow
+ * on a cold start because the artefact loads on first use, which is why the UI
+ * shows a real loading state rather than a skeleton that implies instant data.
+ */
+export const fetchRiskAssessment = (
+  orderId: string,
+  options: { datasetRun?: string; includeContributions?: boolean } = {},
+  signal?: AbortSignal,
+): Promise<RiskAssessmentResponse> =>
+  get<RiskAssessmentResponse>(
+    `/v1/orders/${encodeURIComponent(orderId)}/risk${query({
+      dataset_run: options.datasetRun,
+      include_contributions: options.includeContributions ?? true,
+    })}`,
+    signal,
+  );
+
+// --- economics ---------------------------------------------------------------
+
+export const fetchCostProfiles = (signal?: AbortSignal): Promise<ProfilesResponse> =>
+  get<ProfilesResponse>('/v1/economics/profiles', signal);
 
 export const deriveThreshold = (
   inputs: CostInputs,
   signal?: AbortSignal,
-): Promise<ThresholdDerivation> => post<ThresholdDerivation>('/v1/economics/threshold', inputs, signal);
+): Promise<ThresholdDerivation> =>
+  post<ThresholdDerivation>('/v1/economics/threshold', inputs, signal);
 
-export const runWhatIf = (
+/**
+ * Recompute the whole policy under new merchant economics.
+ *
+ * The threshold, every band boundary, the assignment of each order to a band and
+ * the rupee totals are all recalculated on the server. The console sends inputs
+ * and renders what comes back; it does not scale a cached total, and there is no
+ * economic arithmetic anywhere in this codebase.
+ */
+export const simulateEconomics = (
   inputs: CostInputs,
-  split = 'validation',
+  compareToProfile?: string,
   signal?: AbortSignal,
-): Promise<WhatIfResponse> =>
-  post<WhatIfResponse>('/v1/economics/what-if', { cost_inputs: inputs, split }, signal);
+): Promise<SimulationResult> =>
+  post<SimulationResult>(
+    '/v1/economics/simulate',
+    {
+      cost_inputs: inputs,
+      split: 'validation',
+      compare_to_profile: compareToProfile ?? null,
+    },
+    signal,
+  );
 
-// --- scoring (Phase 3) -------------------------------------------------------
+// --- evaluation --------------------------------------------------------------
 
-export const scoreOrder = (
-  order: unknown,
-  costInputs?: CostInputs,
+export const fetchLadder = (split = 'validation', signal?: AbortSignal): Promise<LadderResponse> =>
+  get<LadderResponse>(`/v1/evaluation/ladder${query({ split })}`, signal);
+
+export const fetchFinalModel = (
+  split: 'validation' | 'test',
   signal?: AbortSignal,
-): Promise<ScoreResponse> =>
-  post<ScoreResponse>('/v1/score', { order, cost_inputs: costInputs ?? null }, signal);
+): Promise<FinalModelResponse> =>
+  get<FinalModelResponse>(`/v1/evaluation/final${query({ split })}`, signal);
 
-// --- evaluation (Phase 4) ----------------------------------------------------
+// --- monitoring --------------------------------------------------------------
 
-export const fetchLadder = (
-  split = 'validation',
+export const fetchModelStatus = (signal?: AbortSignal): Promise<ModelStatusResponse> =>
+  get<ModelStatusResponse>('/v1/monitoring/model', signal);
+
+export const fetchDataStatus = (
+  datasetRun?: string,
   signal?: AbortSignal,
-): Promise<EvaluationReport[]> =>
-  get<EvaluationReport[]>(`/v1/evaluation/ladder?split=${encodeURIComponent(split)}`, signal);
+): Promise<DataStatusResponse> =>
+  get<DataStatusResponse>(`/v1/monitoring/data${query({ dataset_run: datasetRun })}`, signal);
 
-export const fetchFairness = (split = 'validation', signal?: AbortSignal): Promise<FairnessAudit> =>
-  get<FairnessAudit>(`/v1/evaluation/fairness?split=${encodeURIComponent(split)}`, signal);
+export const fetchDecisionStatus = (
+  merchantId?: string,
+  signal?: AbortSignal,
+): Promise<DecisionStatusResponse> =>
+  get<DecisionStatusResponse>(
+    `/v1/monitoring/decisions${query({ merchant_id: merchantId })}`,
+    signal,
+  );
 
-// --- explanations (Phase 5, always optional) ---------------------------------
+// --- agents ------------------------------------------------------------------
 
-export const fetchExplanation = (orderId: string, signal?: AbortSignal): Promise<Explanation> =>
-  post<Explanation>(`/v1/explanations/${encodeURIComponent(orderId)}`, undefined, signal);
+export const fetchAgentStatus = (signal?: AbortSignal): Promise<AgentStatusResponse> =>
+  get<AgentStatusResponse>('/v1/explanations/status', signal);
+
+export const fetchAgentTools = (signal?: AbortSignal): Promise<ToolCatalogueEntry[]> =>
+  get<ToolCatalogueEntry[]>('/v1/explanations/tools', signal);
+
+/**
+ * Ask the investigation agent about one order.
+ *
+ * Throws `ApiError('AGENT_UNAVAILABLE')` when the language layer is off. The UI
+ * shows that reason. It does not fall back to a canned explanation - the reason
+ * codes are already on the risk screen and are the artefact of record.
+ */
+export const investigateOrder = (
+  orderId: string,
+  question: string,
+  datasetRun?: string,
+  signal?: AbortSignal,
+): Promise<InvestigationResponse> =>
+  post<InvestigationResponse>(
+    `/v1/explanations/${encodeURIComponent(orderId)}/investigate${query({
+      question,
+      dataset_run: datasetRun,
+    })}`,
+    undefined,
+    signal,
+  );

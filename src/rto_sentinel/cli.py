@@ -26,6 +26,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import sys
+import textwrap
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -1245,6 +1246,384 @@ def _add_generation_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
+# ---------------------------------------------------------------------------
+# Phase 10: fairness, distribution shift, monitoring
+# ---------------------------------------------------------------------------
+
+
+def _cohort_frame(orders: pd.DataFrame) -> pd.DataFrame:
+    """The operational cohorts this audit is allowed to examine.
+
+    Every column here is an operational fact recorded on the order: where it is
+    being delivered, how large it is, how much history the customer has, how it
+    is being paid for. None is a sensitive characteristic and none is inferred
+    from one - see `docs/responsible_ai.md`.
+    """
+    import pandas as pd
+
+    from rto_sentinel.eval.fairness import band_column, history_band
+
+    return pd.DataFrame(
+        {
+            "pincode_tier": orders["pincode_tier"].astype("object"),
+            "order_value_band": band_column(orders["order_value_inr"], n_bands=4, prefix="v"),
+            "customer_history_band": history_band(orders["prior_order_count"]),
+            "payment_method": orders["payment_method"].astype("object"),
+        }
+    )
+
+
+def _or_na(value: float | None, width: int, digits: int) -> str:
+    """A number, or a right-aligned "n/a" of the same width.
+
+    Printing 0 for an undefined metric would line up neatly and be a lie: a
+    precision with nothing flagged has no denominator, and a zero there sorts and
+    averages as though it had been measured.
+    """
+    if value is None:
+        return "n/a".rjust(width)
+    return f"{value:{width}.{digits}f}"
+
+
+def _cmd_fairness(args: argparse.Namespace) -> int:
+    """Run the cohort and fairness audit against the frozen scored book.
+
+    Reads the calibrated scores written by `rto-sentinel final` and joins them
+    back to the order attributes. Runs on validation by default; the sealed test
+    split requires an explicit reason, exactly as every other test-set read does.
+    """
+
+    from rto_sentinel.configuration import load_cost_model_config, load_evaluation_config
+    from rto_sentinel.eval.fairness import cohort_breakdown, fairness_audit
+    from rto_sentinel.eval.responsible_report import write_fairness_artifacts
+    from rto_sentinel.models import load_manifest
+    from rto_sentinel.models.experiment import cost_inputs_from_profile
+
+    settings = get_settings()
+    split = args.split
+
+    try:
+        scores, orders, run_id = _load_scores_with_attributes(settings, split)
+    except FileNotFoundError as error:
+        print(str(error), file=sys.stderr)
+        return 1
+
+    manifest = load_manifest(settings.artifact_path, run_id)
+    cost_config = load_cost_model_config(settings)
+    evaluation_config = load_evaluation_config(settings)
+    inputs = cost_inputs_from_profile(cost_config.profiles[manifest.cost_profile])
+
+    from rto_sentinel.decision.cost_model import outcome_economics
+
+    economics = outcome_economics(inputs)
+    cohorts = _cohort_frame(orders)
+    labels = scores["label"].to_numpy().astype(int)
+    probabilities = scores["score_calibrated"].to_numpy(dtype=float)
+
+    print(
+        f"\nfairness audit on {split}: {len(labels):,} orders, threshold {manifest.threshold:.4f}"
+    )
+    print(f"cohorts: {', '.join(cohorts.columns)}")
+    print(f"minimum support: {args.min_support} orders, {args.min_flagged} flagged\n")
+
+    all_slices: list[object] = []
+    for column in cohorts.columns:
+        rows = cohort_breakdown(
+            cohorts,
+            labels,
+            probabilities,
+            threshold=manifest.threshold,
+            cohort_column=column,
+            min_support=args.min_support,
+            min_flagged=args.min_flagged,
+            cost_false_positive_inr=economics.false_positive_cost_inr,
+            saving_true_positive_inr=economics.true_positive_saving_inr,
+        )
+        all_slices.extend(rows)
+        print(f"  {column}")
+        print(
+            f"    {'group':34s} {'n':>6s} {'RTO':>7s} {'flag':>7s} {'prec':>7s} "
+            f"{'recall':>7s} {'net/1k':>9s}"
+        )
+        for row in rows:
+            mark = "" if row.sufficient else "  (thin)"
+            print(
+                f"    {row.group:34s} {row.n_orders:6d} {row.rto_rate:7.3f} "
+                f"{row.flag_rate:7.3f} "
+                f"{_or_na(row.precision, 7, 3)} "
+                f"{_or_na(row.recall, 7, 3)} "
+                f"{_or_na(row.net_inr_per_1000, 9, 0)}"
+                f"{mark}"
+            )
+        print()
+
+    audit = fairness_audit(
+        cohorts,
+        labels,
+        probabilities,
+        threshold=manifest.threshold,
+        config=evaluation_config.fairness,
+        min_support=args.min_support,
+        min_flagged=args.min_flagged,
+        cost_false_positive_inr=economics.false_positive_cost_inr,
+        saving_true_positive_inr=economics.true_positive_saving_inr,
+    )
+
+    print(f"disparity review: {'TRIGGERED' if audit.triggered else 'not triggered'}")
+    print(f"  max flag-rate ratio  : {audit.max_flag_rate_ratio:.2f}")
+    print(f"  worst precision drop : {audit.worst_precision_drop:.3f}")
+    print()
+    print(textwrap.fill(audit.narrative, width=88))
+
+    if not args.no_write:
+        written = write_fairness_artifacts(
+            audit,
+            tuple(all_slices),  # type: ignore[arg-type]
+            artifact_root=settings.artifact_path,
+            dataset_run_id=run_id,
+            split=split,
+            model_version=manifest.model_version,
+            threshold=manifest.threshold,
+        )
+        print()
+        for path in written:
+            print(f"wrote {path}")
+    return 0
+
+
+def _load_scores_with_attributes(
+    settings: Settings, split: str
+) -> tuple[pd.DataFrame, pd.DataFrame, str]:
+    """Join the frozen scored book back to the order attributes it was built from.
+
+    The scored book carries order ids, not attributes, which is deliberate: it is
+    a record of what the model said, not a copy of the dataset. The cohort audit
+    needs both, so the orders are reloaded from the dataset artefact and joined
+    on order id. An inner join is used and its size asserted, because a silent
+    partial join would produce a fairness table computed on a subset nobody chose.
+    """
+    import pandas as pd
+
+    from rto_sentinel.models.final import FINAL_DIR
+
+    root = settings.artifact_path / FINAL_DIR
+    runs = sorted(root.glob("*/selection_manifest.json")) if root.is_dir() else []
+    if not runs:
+        msg = (
+            f"no frozen final-model run under {root}. Run `rto-sentinel final` before "
+            "auditing: there is no scored book to audit."
+        )
+        raise FileNotFoundError(msg)
+
+    run_dir = max(runs, key=lambda path: path.stat().st_mtime).parent
+    run_id = run_dir.name
+    scores_path = run_dir / f"scores__{split}.parquet"
+    if not scores_path.is_file():
+        msg = (
+            f"no {split} scores at {scores_path}. The sealed test split is scored only by "
+            "`rto-sentinel final-test`."
+        )
+        raise FileNotFoundError(msg)
+
+    orders_path = settings.artifact_path / "datasets" / run_id / "orders.parquet"
+    if not orders_path.is_file():
+        msg = (
+            f"no order attributes at {orders_path}. The cohort audit needs the dataset "
+            "the model was scored on; regenerate it with `rto-sentinel build-dataset`."
+        )
+        raise FileNotFoundError(msg)
+
+    scores = pd.read_parquet(scores_path)
+    orders = pd.read_parquet(orders_path)
+    merged = scores.merge(orders, on="order_id", how="inner", suffixes=("", "_order"))
+    if len(merged) != len(scores):
+        msg = (
+            f"joined {len(merged):,} of {len(scores):,} scored orders to their attributes. "
+            "A partial join would audit a subset nobody selected; refusing."
+        )
+        raise FileNotFoundError(msg)
+    return merged[list(scores.columns)], merged, run_id
+
+
+def _cmd_shift(args: argparse.Namespace) -> int:
+    """Run the controlled distribution-shift study against the frozen model."""
+    from rto_sentinel.configuration import (
+        load_cost_model_config,
+        load_features_config,
+    )
+    from rto_sentinel.eval.responsible_report import write_shift_artifacts
+    from rto_sentinel.eval.shift import default_environments, run_shift_study
+    from rto_sentinel.models import load_manifest
+    from rto_sentinel.models.calibrated import CalibratedModel
+    from rto_sentinel.models.experiment import cost_inputs_from_profile
+    from rto_sentinel.serving.model_registry import ModelRegistry, ModelUnavailableError
+
+    settings = get_settings()
+    registry = ModelRegistry(settings.artifact_path)
+    try:
+        artefact, card = registry.resolve()
+    except ModelUnavailableError as error:
+        print(str(error), file=sys.stderr)
+        return 1
+
+    model, _ = CalibratedModel.load(artefact)
+    manifest = load_manifest(settings.artifact_path, card.dataset_run_id)
+
+    from rto_sentinel.decision.cost_model import outcome_economics
+
+    cost_config = load_cost_model_config(settings)
+    inputs = cost_inputs_from_profile(cost_config.profiles[manifest.cost_profile])
+    economics = outcome_economics(inputs)
+
+    environments = default_environments(seed=args.seed or manifest.seed, n_orders=args.n_orders)
+    print(f"\nmodel      : {card.model_name} v{card.model_version} (frozen, not retrained)")
+    print(f"threshold  : {manifest.threshold:.4f} (frozen)")
+    print(f"environments: {len(environments)} x {args.n_orders:,} orders\n")
+
+    def announce(spec: object) -> None:
+        print(f"  generating {spec.name}...", flush=True)  # type: ignore[attr-defined]
+
+    study = run_shift_study(
+        environments,
+        model,
+        generator_config=load_generator_config(settings),
+        features_config=load_features_config(settings),
+        splits_config=load_splits_config(settings),
+        threshold=manifest.threshold,
+        cost_false_positive_inr=economics.false_positive_cost_inr,
+        saving_true_positive_inr=economics.true_positive_saving_inr,
+        model_version=card.model_version,
+        feature_version=card.feature_version,
+        feature_names=tuple(card.feature_names),
+        progress=announce,
+    )
+
+    print()
+    print(
+        f"  {'environment':24s} {'n':>7s} {'RTO':>7s} {'PR-AUC':>8s} {'dPR':>8s} "
+        f"{'ECE':>7s} {'flag':>7s} {'prec':>7s} {'net/1k':>9s} {'dNet':>9s}"
+    )
+    for result in study.results:
+        print(
+            f"  {result.environment:24s} {result.n_orders:7,d} "
+            f"{result.observed_rto_rate:7.3f} {result.pr_auc:8.3f} "
+            f"{('       -' if result.pr_auc_delta is None else f'{result.pr_auc_delta:+8.3f}')} "
+            f"{result.expected_calibration_error:7.3f} {result.flag_rate:7.3f} "
+            f"{('    n/a' if result.precision is None else f'{result.precision:7.3f}')} "
+            f"{result.net_inr_per_1000:9,.0f} "
+            f"{('        -' if result.net_delta is None else f'{result.net_delta:+9,.0f}')}"
+        )
+
+    print()
+    for finding in study.findings:
+        print(textwrap.fill(f"- {finding}", width=88, subsequent_indent="  "))
+
+    if not args.no_write:
+        for path in write_shift_artifacts(study, artifact_root=settings.artifact_path):
+            print(f"\nwrote {path}")
+    return 0
+
+
+def _cmd_monitor(args: argparse.Namespace) -> int:
+    """Compare a baseline period against a current period on the scored book.
+
+    Windows are cut by order time within the frozen scored book, which is what
+    makes this runnable offline and reproducible. In a live deployment the same
+    functions take the last N days of scored traffic; the arithmetic is identical
+    and the module has no idea where the frames came from.
+    """
+    import pandas as pd
+
+    from rto_sentinel.eval.responsible_report import write_drift_artifacts
+    from rto_sentinel.models import load_manifest
+    from rto_sentinel.monitoring import build_drift_report
+
+    settings = get_settings()
+    try:
+        scores, orders, run_id = _load_scores_with_attributes(settings, args.split)
+    except FileNotFoundError as error:
+        print(str(error), file=sys.stderr)
+        return 1
+
+    manifest = load_manifest(settings.artifact_path, run_id)
+
+    frame = scores.copy()
+    frame["ordered_at"] = pd.to_datetime(orders["ordered_at"].to_numpy())
+    for column in ("order_value_inr", "discount_depth", "is_cod", "prior_rto_rate", "item_count"):
+        if column in orders.columns:
+            frame[column] = orders[column].to_numpy()
+
+    frame = frame.sort_values("ordered_at").reset_index(drop=True)
+    cut = int(len(frame) * args.baseline_fraction)
+    baseline, current = frame.iloc[:cut], frame.iloc[cut:]
+
+    if args.simulate_immature:
+        # Reproduce the situation that actually occurs in production: the recent
+        # window has not matured, so no labelled comparison is possible. The
+        # report must say the question is unanswered rather than showing green.
+        current = current.copy()
+        current["label"] = pd.NA
+
+    report = build_drift_report(
+        baseline,
+        current,
+        threshold=manifest.threshold,
+        feature_columns=[
+            column
+            for column in ("order_value_inr", "discount_depth", "is_cod", "prior_rto_rate")
+            if column in frame.columns
+        ],
+        model_version=manifest.model_version,
+        feature_version=manifest.feature_version,
+    )
+
+    print(f"\nbaseline: {report.baseline.n_orders:,} orders, {report.baseline.n_matured:,} matured")
+    print(f"current : {report.current.n_orders:,} orders, {report.current.n_matured:,} matured")
+    print(f"labels available for comparison: {report.labels_available}")
+    print(f"worst severity: {report.worst_severity}\n")
+
+    print(f"  {'kind':14s} {'quantity':30s} {'stat':20s} {'distance':>9s}  severity")
+    for signal in report.signals:
+        flag = "" if signal.sufficient else "  (thin)"
+        print(
+            f"  {signal.kind:14s} {signal.name:30s} {signal.statistic:20s} "
+            f"{signal.distance:9.4f}  {signal.severity}{flag}"
+        )
+
+    if report.performance:
+        print(f"\n  {'metric':24s} {'baseline':>10s} {'current':>10s} {'delta':>10s}")
+        for delta in report.performance:
+            print(
+                f"  {delta.metric:24s} {delta.baseline:10.4f} {delta.current:10.4f} "
+                f"{delta.delta:+10.4f}"
+            )
+
+    print()
+    for warning in report.warnings:
+        print(textwrap.fill(f"- {warning}", width=88, subsequent_indent="  "))
+
+    if not args.no_write:
+        for path in write_drift_artifacts(
+            report, artifact_root=settings.artifact_path, dataset_run_id=run_id
+        ):
+            print(f"\nwrote {path}")
+    return 0
+
+
+def _cmd_responsible_report(args: argparse.Namespace) -> int:
+    """Render docs/responsible_ai.md from the saved fairness, shift and drift artefacts."""
+    from rto_sentinel.eval.responsible_report import render_responsible_report
+
+    settings = get_settings()
+    try:
+        path = render_responsible_report(artifact_root=settings.artifact_path)
+    except FileNotFoundError as error:
+        print(str(error), file=sys.stderr)
+        return 1
+    print(f"wrote {path}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="rto-sentinel",
@@ -1383,6 +1762,71 @@ def build_parser() -> argparse.ArgumentParser:
         "evaluate", help="re-render the comparison from saved experiment artefacts"
     )
     evaluate.set_defaults(func=_cmd_evaluate)
+
+    fairness_parser = sub.add_parser(
+        "fairness", help="cohort and disparate-impact audit over operational cohorts"
+    )
+    fairness_parser.add_argument(
+        "--split",
+        default="validation",
+        choices=["validation", "test"],
+        help="which scored book to audit (default: validation)",
+    )
+    fairness_parser.add_argument(
+        "--min-support",
+        type=int,
+        default=100,
+        help="orders a group needs before its rates count as evidence",
+    )
+    fairness_parser.add_argument(
+        "--min-flagged",
+        type=int,
+        default=30,
+        help="flagged orders a group needs before its precision counts as evidence",
+    )
+    fairness_parser.add_argument("--no-write", action="store_true", help="skip writing artefacts")
+    fairness_parser.set_defaults(func=_cmd_fairness)
+
+    shift_parser = sub.add_parser(
+        "shift", help="controlled distribution-shift study against the frozen model"
+    )
+    shift_parser.add_argument(
+        "--n-orders", type=int, default=8000, help="orders per environment (default: 8000)"
+    )
+    shift_parser.add_argument(
+        "--seed", type=int, default=None, help="base seed (default: the manifest seed)"
+    )
+    shift_parser.add_argument("--no-write", action="store_true", help="skip writing artefacts")
+    shift_parser.set_defaults(func=_cmd_shift)
+
+    monitor_parser = sub.add_parser(
+        "monitor", help="compare a baseline period against a current period"
+    )
+    monitor_parser.add_argument(
+        "--split",
+        default="validation",
+        choices=["validation", "test"],
+        help="which scored book to window (default: validation)",
+    )
+    monitor_parser.add_argument(
+        "--baseline-fraction",
+        type=float,
+        default=0.6,
+        help="share of the book, earliest first, that forms the baseline window",
+    )
+    monitor_parser.add_argument(
+        "--simulate-immature",
+        action="store_true",
+        help="blank the current window's labels, reproducing an unmatured recent period",
+    )
+    monitor_parser.add_argument("--no-write", action="store_true", help="skip writing artefacts")
+    monitor_parser.set_defaults(func=_cmd_monitor)
+
+    responsible = sub.add_parser(
+        "responsible-report",
+        help="render docs/responsible_ai.md from saved fairness, shift and drift artefacts",
+    )
+    responsible.set_defaults(func=_cmd_responsible_report)
 
     return parser
 

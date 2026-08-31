@@ -32,42 +32,53 @@ evaluation report object, and on the console — not only here.
 
 ---
 
-## Current status: Phase 7
+## Current status: Phase 8 of 8
 
-**Phase 1** established the architecture, **Phase 2** built the data layer,
-**Phase 3** the feature pipeline and leakage defences, **Phase 4** the baseline
-ladder, **Phase 5** the calibrated final model and its one sealed-set evaluation,
-**Phase 6** the economic decision engine, and **Phase 7** the production-style
-backend that serves all of it. Implemented, tested and working:
+Eight phases: architecture, the data layer, features and leakage defences, the
+baseline ladder, the calibrated final model, the economic decision engine, the
+production API, and the agent layer. All implemented and tested.
+
+**One thing is not configured: the language layer.** No `ANTHROPIC_API_KEY` is
+set, so the agent endpoints report themselves unavailable with a reason. The risk
+system does not depend on them — scoring, calibration, the decision engine and
+every endpoint outside `/v1/explanations` work exactly as they do with the key
+present. See [docs/agents.md § Configuring it](docs/agents.md#configuring-it).
+
+What works today:
 
 - A reproducible **benchmark generator** with a documented causal simulation
 - **PostgreSQL persistence**: 10 tables, Alembic migrations, bulk loader
-- **Data validation**, **as-of joins**, **label maturity**, and a **split
-  protocol** with a sealed test set
-- **Six feature families** behind a typed dataset contract, with **eleven leakage
-  tests** running against real generated data
-- **The complete baseline ladder**, rungs 0–4, on identical footing
-- **A calibrated final model**, selected by a one-standard-error rule and
-  calibrated by cross-validation inside validation, frozen to a manifest
+- **Data validation**: ten check groups, each verified to actually fire
+- **As-of joins** with a brute-force reference implementation and a leakage guard
+- **Label maturity**: unresolved orders get a NULL label, never "delivered"
+- **Split protocol**: temporal windows inside disjoint customer pools, sealed test set
+- **Six feature families** behind a typed dataset contract, each independently ablatable
+- **Eleven leakage tests** running against real generated data
+- **The baseline ladder**, rungs 0–4, on identical footing
+- **A calibrated final model** selected by a one-standard-error rule, with the
+  calibration method chosen by cross-validation *inside* validation
+- **A frozen selection manifest** and a **single sealed test-set evaluation**
 - **A deterministic economic decision engine**: cost-derived threshold, four-rung
   friction ladder, stable reason codes, no expressible silent hard block
-- **Portfolio economics** in expected and realized modes, a threshold sweep, and a
-  **merchant simulator** that recalculates server-side
-- **A production-style FastAPI backend** serving the real chain end to end:
-  database → feature pipeline → trained artefact → calibration → decision engine
-- **A controlled model-loading service** that verifies checksums and feature
-  fingerprints, refuses uncalibrated artefacts, and reports its version on every
-  response
-- **Append-only decision logging** with human overrides that require a reason
-- **Generated reports**: [docs/model_card.md](docs/model_card.md),
-  [docs/economics.md](docs/economics.md), [docs/ladder_results.md](docs/ladder_results.md)
-- **API documentation**: [docs/api.md](docs/api.md)
+- **Portfolio economics** in expected and realized modes, with the gap reported
+  as a calibration check
+- **A merchant simulation API** that genuinely recalculates threshold, bands,
+  per-order assignment and rupee totals server-side
+- **A production FastAPI backend** wired to the real database, feature pipeline,
+  model artefact, calibrator and decision engine — no mock data anywhere
+- **An agent layer**: six read-only tools, four grounding validators, a full
+  audit trail, and a real tool-use loop — which refuses rather than fabricates
+  when the language layer is unavailable
+- **A merchant console** (React + TypeScript): dashboard, server-filtered order
+  queue, per-order investigation, economic simulator, and an evaluation screen
+  that keeps validation and sealed-test figures in separate columns. It computes
+  nothing — every displayed value is a backend response, and an unavailable
+  value renders as an em-dash rather than a zero
+- **Generated reports**: [ladder results](docs/ladder_results.md),
+  [model card](docs/model_card.md), [economics](docs/economics.md)
 
-**What is still not built.** Order ingestion (the API references stored orders
-rather than accepting new ones — see [docs/api.md](docs/api.md) for why), the
-console's queue and sliders, the agent layer, and the outcome loop. **The cohort
-and fairness audit has not been run**, and `/v1/evaluation/fairness` returns 501
-saying so rather than a fabricated breakdown.
+**Not built:** the outcome loop and the cohort fairness audit — so **no fairness
+claim should be made** about this model.
 
 Full breakdown: [ARCHITECTURE.md § Implementation status](ARCHITECTURE.md#8-implementation-status).
 
@@ -229,8 +240,17 @@ cd console && npm run dev
 The console is at <http://localhost:5173> and the API at <http://localhost:8000>,
 with interactive docs at <http://localhost:8000/docs>.
 
-The console will report **"model: not ready"**. That is correct — no model has
-been trained yet, and the service says so rather than inventing a probability.
+Until a model has been trained, the console reports **"model: not ready"** and
+every risk panel shows that error. That is correct — the service says so rather
+than inventing a probability.
+
+**If the database URL uses `localhost`, change it to `127.0.0.1`.** `localhost`
+resolves to `::1` first, and a Docker container published as
+`127.0.0.1:5442->5432` is not listening there. libpq will connect eventually, on
+the IPv4 fallback — after burning a connect timeout that took ~130 seconds on
+Windows. `RTO_DATABASE_URL` in `.env.example` uses `127.0.0.1` for this reason,
+and the engine now sets an explicit `connect_timeout` so an unreachable database
+fails fast instead of hanging a worker thread.
 
 ### With Docker
 
@@ -527,7 +547,9 @@ a key must be present.
 | [docs/splitting.md](docs/splitting.md) | The split protocol, and why random splitting would be dangerous |
 | [docs/ladder_results.md](docs/ladder_results.md) | **Measured baseline-ladder results.** Generated, never hand-written |
 | [docs/model_card.md](docs/model_card.md) | **The final model's card.** Intended use, limitations, fairness, drift, and every measured number |
+| [docs/agents.md](docs/agents.md) | **The agent layer.** Tools, permission boundaries, grounding, audit, and what it refuses to do |
 | [docs/economics.md](docs/economics.md) | **The economic evaluation.** Threshold derivation, the friction ladder, expected and realized rupees, sensitivity, and where every number came from |
+| [docs/console.md](docs/console.md) | **The merchant console.** The five screens, the four rules it holds, and what it deliberately does not build |
 | [docs/api.md](docs/api.md) | **The API reference.** The inference chain, every endpoint, real request/response examples, and what the API refuses to do |
 | [REPORT.md](REPORT.md) | Final report — written once the system is complete |
 | [docs/sources.md](docs/sources.md) | Every market figure, with its citation |

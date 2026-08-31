@@ -7,9 +7,13 @@ This document defines the components, their responsibilities, and the boundaries
 between them. Where a boundary is enforced by a test rather than by convention,
 the test is named. Where something is not built yet, it says so.
 
-**Status: Phase 2 complete (data layer and benchmark generator).** The models,
-decision arithmetic, console UI and agent layer remain scaffolded with fixed
-interfaces and are not implemented. See [Implementation status](#8-implementation-status).
+**Status: the end-to-end path is built and running.** Data layer, feature
+pipeline, calibrated model, deterministic decision engine, FastAPI backend, agent
+layer and merchant console are implemented and tested. What remains unbuilt is
+named explicitly: the cohort fairness audit (so **no fairness claim should be
+made** about this model), the outcome loop, drift monitoring, and address repair
+— which is deferred with reasons rather than faked. See
+[Implementation status](#8-implementation-status).
 
 ---
 
@@ -433,6 +437,21 @@ none.** A chart that can invent its own numbers is a picture, not a report.
 One HTTP client; no component fetches on its own. That leaves nowhere for a
 component to hardcode a fallback when a call fails.
 
+Five screens: dashboard, order queue, order investigation, economic simulator,
+evaluation. The type system carries the honesty rule — `AsyncState<T>` is a
+discriminated union, so `data` does not exist until a request has succeeded and
+there is no property to write `data ?? fallback` against. Formatters return an
+em-dash for `null`, never a zero, and take no default arguments.
+
+The simulator is the sharp case. Dragging a slider changes local state only;
+recomputing sends the inputs to `POST /v1/economics/simulate` and the server
+re-derives the threshold, re-resolves the bands, re-assigns every order in the
+scored book and re-prices it. Doing that arithmetic in JavaScript would be
+faster and would create a second implementation of the decision rule — the one
+on screen, and the one nobody tested.
+
+Full detail: [docs/console.md](docs/console.md).
+
 ---
 
 ## 4. Boundaries, enforced
@@ -555,8 +574,8 @@ reviewer to verify that in a minute.
 | CLI: `config check`, `generate`, `validate`, `db upgrade`, `db stats`, `seed-db`, `features`, `split`, `train`, `evaluate` | **Implemented and exercised** |
 | The four spec leakage tests | **Running and passing** (were skipped in Phase 1) |
 | API app, error envelope, `/health`, `/readiness` | **Implemented and tested** |
-| API contract for all 17 endpoints | **Published in OpenAPI**; 15 return 501 |
-| Console shell + live backend status | **Implemented and tested** |
+| API contract for all 17 endpoints | **Published in OpenAPI**; 2 return 501 (fairness audit, address repair) |
+
 | Architecture layering tests | **Implemented and passing** |
 | Feature families, pipeline, dataset contract | **Implemented and tested** |
 | Feature catalogue with per-feature availability | **Implemented and tested** |
@@ -584,11 +603,20 @@ reviewer to verify that in a minute.
 | Orders, risk, decision, override, monitoring endpoints | **Implemented and tested** |
 | Evaluation endpoints reading frozen artefacts | **Implemented and tested** |
 | End-to-end integration test (database → model → decision) | **Implemented and passing** |
-| Console: queue, sliders, charts, fairness | Later |
+| Console: dashboard, order queue, investigation, simulator, evaluation | **Implemented and tested** |
+| Console: every displayed value sourced from a backend response | **Implemented and tested** (`OrderInvestigation.test.tsx` asserts the request URL and the rendered response) |
+| Console: fairness screen | Blocked on the audit below — a screen with no audit behind it would have nothing true to show |
 | Fairness audit by cohort | Contract fixed — **not run**, endpoint returns 501 |
-| Agent layer (4 jobs + grounding) | Interfaces fixed — Phase 6 |
+| Agent tool contract, schemas and permission boundaries | **Implemented and tested** |
+| Read-only application toolset (6 tools) | **Implemented and tested** |
+| Grounding validators (4) | **Implemented and tested** |
+| Agent audit trail | **Implemented and tested** |
+| Anthropic provider, incl. tool use | **Implemented; unverified against the live API** |
+| Risk investigation agent (tool loop) | **Implemented; unverified against the live API** |
+| Confirmation writer, digest writer | **Implemented; unverified against the live API** |
+| Address repair | **Deferred, with reasons** (`agents/address_repair.py`) |
 | Cohort/fairness audit execution | **Not run.** No fairness claim may be made until it is |
-| Drift monitoring, outcome loop | Interfaces fixed — Phase 6 |
+| Drift monitoring, outcome loop | Interfaces fixed — **not implemented** |
 
 Unimplemented functions raise `NotImplementedError` with the phase named. They do
 not return placeholder values.
@@ -633,6 +661,26 @@ is a separate concern and conflating the two is how a serving path starts lying.
 artefact both preconditions fail, and "no model is loaded" is the one an operator
 can act on; reporting "no such order" would send them hunting a data problem that
 is not there.
+
+**The agent layer declares its tools; the composition layer implements them.**
+`agents` is forbidden from importing `decision`, `models`, `features`, `data` or
+`eval`, which is the mechanical form of "the LLM is downstream of the decision".
+That rule would be worth little if the package simply imported the decision
+engine to read from it — so `agents.tools` declares schemas, a protocol and a
+permission boundary, and `serving.agent_tools` implements them. An agent receives
+a toolset as an argument; it cannot construct one.
+
+The narrow exception that follows — `serving` may import `agents.tools` and
+`agents.audit` — is encoded in the layering tests along with its complement:
+`serving` may **not** import an agent job or the provider. Without that half,
+"serving may import agents" would quietly permit the composition layer to start
+running language models.
+
+**Retrieved values are reported; the model's prose is not.**
+`RiskInvestigation` carries `probability`, `band`, `threshold` and
+`model_version` copied from the tool results. A model asserting a different
+number changes the sentence and nothing else. That is the structural reason an
+agent cannot alter a risk decision, and it is asserted directly.
 
 **Provenance travels with the number, not in a footnote.** An economic report
 mixes measured metrics, merchant inputs, published figures, simulator parameters

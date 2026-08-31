@@ -151,21 +151,33 @@ LLMProviderDep = Annotated[LLMProvider, Depends(llm_provider_dep)]
 
 
 @functools.lru_cache(maxsize=4)
-def _registry_for(artifact_root: Path) -> ModelRegistry:
+def _registry_for(artifact_root: Path, pinned: Path | None) -> ModelRegistry:
     """One registry per artefact root, for the life of the process.
 
     Cached deliberately. The registry holds a deserialised booster; building one
     per request would be slow and would make the served model a function of
     whatever is on disk at that instant rather than a stable, reportable version.
     The cache is keyed on the path so a test pointing at a temporary artefact
-    store gets its own registry instead of the production one.
+    store gets its own registry instead of the production one - and on the pin,
+    so changing which artefact is pinned does not hand back a registry still
+    holding the previous one.
     """
-    return ModelRegistry(artifact_root)
+    return ModelRegistry(artifact_root, pinned=pinned)
 
 
 def model_registry_dep(settings: SettingsDep) -> ModelRegistry:
-    """The process-wide model registry. Never loads the artefact by itself."""
-    return _registry_for(settings.artifact_path)
+    """The process-wide model registry. Never loads the artefact by itself.
+
+    `RTO_ACTIVE_MODEL_PATH` pins a specific artefact. Unset, the registry serves
+    the newest calibrated artefact in the store - convenient in development,
+    where the pin would have to be updated after every training run.
+    """
+    pinned = (
+        settings.resolve(settings.active_model_path)
+        if settings.active_model_path is not None
+        else None
+    )
+    return _registry_for(settings.artifact_path, pinned)
 
 
 ModelRegistryDep = Annotated[ModelRegistry, Depends(model_registry_dep)]

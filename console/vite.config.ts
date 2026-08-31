@@ -28,6 +28,18 @@ export default defineConfig({
         target: 'http://127.0.0.1:8000',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
+        // Bound the proxy so a backend that accepts a connection and then
+        // stalls surfaces as an error state rather than an indefinite spinner.
+        //
+        // This is a backstop, not a fix. A stalled backend is a backend bug and
+        // belongs to the backend: the one time this actually happened, the
+        // cause was libpq spending ~130s on a dead IPv6 address before falling
+        // back to IPv4, and it was fixed there (see `CONNECT_TIMEOUT_SECONDS`
+        // in `db/session.py`). What the console gets from a bound here is that
+        // the next such bug shows the user an error instead of a spinner that
+        // never resolves.
+        timeout: 30_000,
+        proxyTimeout: 30_000,
       },
     },
   },

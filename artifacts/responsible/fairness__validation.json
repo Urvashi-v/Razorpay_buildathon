@@ -1,0 +1,543 @@
+{
+  "audit": {
+    "cohorts_examined": [
+      "pincode_tier",
+      "order_value_band"
+    ],
+    "groups_below_support": [],
+    "least_flagged_group": "order_value_band=v1 [39-420)",
+    "max_flag_rate_ratio": 3.148148148148148,
+    "min_support": 100,
+    "most_flagged_group": "order_value_band=v4 [1,135-8,481)",
+    "narrative": "The most-flagged group with sufficient support is order_value_band=v4 [1,135-8,481), flagged 3.15x as often as order_value_band=v1 [39-420). The precision gap between the most-flagged group and the best-performing group in its cohort is 0.036. This does not trip the configured review, which requires BOTH a ratio above 1.5 AND a precision drop above 0.1. A higher flag rate on its own is not a finding: a group that returns more parcels should be flagged more often, and equalising flag rates would make the system worse at its job while looking fairer.",
+    "slices": [
+      {
+        "cohort": "pincode_tier",
+        "flag_rate": 0.12696148359486448,
+        "flag_rate_ci": [
+          0.10433215529666506,
+          0.1536570088551461
+        ],
+        "group": "tier_1",
+        "insufficient_reason": "",
+        "n_flagged": 89,
+        "n_orders": 701,
+        "n_positives": 101,
+        "net_inr_per_1000": 2893.009985734665,
+        "precision": 0.4606741573033708,
+        "precision_ci": [
+          0.3608972112390251,
+          0.5637054383862982
+        ],
+        "recall": 0.40594059405940597,
+        "rto_rate": 0.14407988587731813,
+        "rto_rate_ci": [
+          0.12002210407257316,
+          0.17201727051969026
+        ],
+        "sufficient": true
+      },
+      {
+        "cohort": "pincode_tier",
+        "flag_rate": 0.1810918774966711,
+        "flag_rate_ci": [
+          0.15519512167365337,
+          0.21023453987626659
+        ],
+        "group": "tier_2",
+        "insufficient_reason": "",
+        "n_flagged": 136,
+        "n_orders": 751,
+        "n_positives": 150,
+        "net_inr_per_1000": 3950.7323568575234,
+        "precision": 0.45588235294117646,
+        "precision_ci": [
+          0.3745380653137733,
+          0.5396504728980133
+        ],
+        "recall": 0.41333333333333333,
+        "rto_rate": 0.19973368841544606,
+        "rto_rate_ci": [
+          0.17269997071686155,
+          0.22982357283014032
+        ],
+        "sufficient": true
+      },
+      {
+        "cohort": "pincode_tier",
+        "flag_rate": 0.2800687285223368,
+        "flag_rate_ci": [
+          0.24512126279070065,
+          0.3179004453087381
+        ],
+        "group": "tier_3",
+        "insufficient_reason": "",
+        "n_flagged": 163,
+        "n_orders": 582,
+        "n_positives": 137,
+        "net_inr_per_1000": 9481.958762886597,
+        "precision": 0.5153374233128835,
+        "precision_ci": [
+          0.4391498607613197,
+          0.5908187096128673
+        ],
+        "recall": 0.6131386861313869,
+        "rto_rate": 0.23539518900343642,
+        "rto_rate_ci": [
+          0.20273261484524446,
+          0.27152787771189263
+        ],
+        "sufficient": true
+      },
+      {
+        "cohort": "order_value_band",
+        "flag_rate": 0.10609037328094302,
+        "flag_rate_ci": [
+          0.08222543582677726,
+          0.13585650138219843
+        ],
+        "group": "v1 [39-420)",
+        "insufficient_reason": "",
+        "n_flagged": 54,
+        "n_orders": 509,
+        "n_positives": 75,
+        "net_inr_per_1000": 3660.117878192534,
+        "precision": 0.5185185185185185,
+        "precision_ci": [
+          0.3885170019812708,
+          0.6460602725338812
+        ],
+        "recall": 0.37333333333333335,
+        "rto_rate": 0.14734774066797643,
+        "rto_rate_ci": [
+          0.11919868033867342,
+          0.18077991182597064
+        ],
+        "sufficient": true
+      },
+      {
+        "cohort": "order_value_band",
+        "flag_rate": 0.1279527559055118,
+        "flag_rate_ci": [
+          0.10167218817852429,
+          0.159817881674494
+        ],
+        "group": "v2 [420-698)",
+        "insufficient_reason": "",
+        "n_flagged": 65,
+        "n_orders": 508,
+        "n_positives": 92,
+        "net_inr_per_1000": 3735.236220472441,
+        "precision": 0.49230769230769234,
+        "precision_ci": [
+          0.37463839458541426,
+          0.6108354751272451
+        ],
+        "recall": 0.34782608695652173,
+        "rto_rate": 0.18110236220472442,
+        "rto_rate_ci": [
+          0.15004760950629076,
+          0.2169438789391535
+        ],
+        "sufficient": true
+      },
+      {
+        "cohort": "order_value_band",
+        "flag_rate": 0.19488188976377951,
+        "flag_rate_ci": [
+          0.16277959220354088,
+          0.23156411587697673
+        ],
+        "group": "v3 [698-1,135)",
+        "insufficient_reason": "",
+        "n_flagged": 99,
+        "n_orders": 508,
+        "n_positives": 101,
+        "net_inr_per_1000": 4198.818897637795,
+        "precision": 0.45454545454545453,
+        "precision_ci": [
+          0.3599936019378829,
+          0.552493053704647
+        ],
+        "recall": 0.44554455445544555,
+        "rto_rate": 0.19881889763779528,
+        "rto_rate_ci": [
+          0.1664295217190207,
+          0.2357291062572322
+        ],
+        "sufficient": true
+      },
+      {
+        "cohort": "order_value_band",
+        "flag_rate": 0.33398821218074654,
+        "flag_rate_ci": [
+          0.2943937277225957,
+          0.3760697320986433
+        ],
+        "group": "v4 [1,135-8,481)",
+        "insufficient_reason": "",
+        "n_flagged": 170,
+        "n_orders": 509,
+        "n_positives": 120,
+        "net_inr_per_1000": 9076.620825147347,
+        "precision": 0.4823529411764706,
+        "precision_ci": [
+          0.40846206851341693,
+          0.5570237250325943
+        ],
+        "recall": 0.6833333333333333,
+        "rto_rate": 0.2357563850687623,
+        "rto_rate_ci": [
+          0.20094538876043927,
+          0.2745260354520656
+        ],
+        "sufficient": true
+      }
+    ],
+    "triggered": false,
+    "worst_precision_drop": 0.036165577342047894
+  },
+  "dataset_run_id": "7b5ae86219ac7cafe45e7d51",
+  "disclaimer": "Controlled benchmark experiment on synthetic data. Cohorts, shifts and drift windows are properties of the documented simulator in docs/simulator.md, not observations of real customers, real distribution shift, or real production behaviour. These results are evidence that the audit machinery works and that this model behaves a certain way on this benchmark. They are NOT evidence of production fairness or production robustness, and no such claim should be made from them.",
+  "generated_at": "2026-08-31T13:04:53.809183+00:00",
+  "model_version": "a0d780424b79",
+  "slices": [
+    {
+      "cohort": "pincode_tier",
+      "flag_rate": 0.12696148359486448,
+      "flag_rate_ci": [
+        0.10433215529666506,
+        0.1536570088551461
+      ],
+      "group": "tier_1",
+      "insufficient_reason": "",
+      "n_flagged": 89,
+      "n_orders": 701,
+      "n_positives": 101,
+      "net_inr_per_1000": 2893.009985734665,
+      "precision": 0.4606741573033708,
+      "precision_ci": [
+        0.3608972112390251,
+        0.5637054383862982
+      ],
+      "recall": 0.40594059405940597,
+      "rto_rate": 0.14407988587731813,
+      "rto_rate_ci": [
+        0.12002210407257316,
+        0.17201727051969026
+      ],
+      "sufficient": true
+    },
+    {
+      "cohort": "pincode_tier",
+      "flag_rate": 0.1810918774966711,
+      "flag_rate_ci": [
+        0.15519512167365337,
+        0.21023453987626659
+      ],
+      "group": "tier_2",
+      "insufficient_reason": "",
+      "n_flagged": 136,
+      "n_orders": 751,
+      "n_positives": 150,
+      "net_inr_per_1000": 3950.7323568575234,
+      "precision": 0.45588235294117646,
+      "precision_ci": [
+        0.3745380653137733,
+        0.5396504728980133
+      ],
+      "recall": 0.41333333333333333,
+      "rto_rate": 0.19973368841544606,
+      "rto_rate_ci": [
+        0.17269997071686155,
+        0.22982357283014032
+      ],
+      "sufficient": true
+    },
+    {
+      "cohort": "pincode_tier",
+      "flag_rate": 0.2800687285223368,
+      "flag_rate_ci": [
+        0.24512126279070065,
+        0.3179004453087381
+      ],
+      "group": "tier_3",
+      "insufficient_reason": "",
+      "n_flagged": 163,
+      "n_orders": 582,
+      "n_positives": 137,
+      "net_inr_per_1000": 9481.958762886597,
+      "precision": 0.5153374233128835,
+      "precision_ci": [
+        0.4391498607613197,
+        0.5908187096128673
+      ],
+      "recall": 0.6131386861313869,
+      "rto_rate": 0.23539518900343642,
+      "rto_rate_ci": [
+        0.20273261484524446,
+        0.27152787771189263
+      ],
+      "sufficient": true
+    },
+    {
+      "cohort": "order_value_band",
+      "flag_rate": 0.10609037328094302,
+      "flag_rate_ci": [
+        0.08222543582677726,
+        0.13585650138219843
+      ],
+      "group": "v1 [39-420)",
+      "insufficient_reason": "",
+      "n_flagged": 54,
+      "n_orders": 509,
+      "n_positives": 75,
+      "net_inr_per_1000": 3660.117878192534,
+      "precision": 0.5185185185185185,
+      "precision_ci": [
+        0.3885170019812708,
+        0.6460602725338812
+      ],
+      "recall": 0.37333333333333335,
+      "rto_rate": 0.14734774066797643,
+      "rto_rate_ci": [
+        0.11919868033867342,
+        0.18077991182597064
+      ],
+      "sufficient": true
+    },
+    {
+      "cohort": "order_value_band",
+      "flag_rate": 0.1279527559055118,
+      "flag_rate_ci": [
+        0.10167218817852429,
+        0.159817881674494
+      ],
+      "group": "v2 [420-698)",
+      "insufficient_reason": "",
+      "n_flagged": 65,
+      "n_orders": 508,
+      "n_positives": 92,
+      "net_inr_per_1000": 3735.236220472441,
+      "precision": 0.49230769230769234,
+      "precision_ci": [
+        0.37463839458541426,
+        0.6108354751272451
+      ],
+      "recall": 0.34782608695652173,
+      "rto_rate": 0.18110236220472442,
+      "rto_rate_ci": [
+        0.15004760950629076,
+        0.2169438789391535
+      ],
+      "sufficient": true
+    },
+    {
+      "cohort": "order_value_band",
+      "flag_rate": 0.19488188976377951,
+      "flag_rate_ci": [
+        0.16277959220354088,
+        0.23156411587697673
+      ],
+      "group": "v3 [698-1,135)",
+      "insufficient_reason": "",
+      "n_flagged": 99,
+      "n_orders": 508,
+      "n_positives": 101,
+      "net_inr_per_1000": 4198.818897637795,
+      "precision": 0.45454545454545453,
+      "precision_ci": [
+        0.3599936019378829,
+        0.552493053704647
+      ],
+      "recall": 0.44554455445544555,
+      "rto_rate": 0.19881889763779528,
+      "rto_rate_ci": [
+        0.1664295217190207,
+        0.2357291062572322
+      ],
+      "sufficient": true
+    },
+    {
+      "cohort": "order_value_band",
+      "flag_rate": 0.33398821218074654,
+      "flag_rate_ci": [
+        0.2943937277225957,
+        0.3760697320986433
+      ],
+      "group": "v4 [1,135-8,481)",
+      "insufficient_reason": "",
+      "n_flagged": 170,
+      "n_orders": 509,
+      "n_positives": 120,
+      "net_inr_per_1000": 9076.620825147347,
+      "precision": 0.4823529411764706,
+      "precision_ci": [
+        0.40846206851341693,
+        0.5570237250325943
+      ],
+      "recall": 0.6833333333333333,
+      "rto_rate": 0.2357563850687623,
+      "rto_rate_ci": [
+        0.20094538876043927,
+        0.2745260354520656
+      ],
+      "sufficient": true
+    },
+    {
+      "cohort": "customer_history_band",
+      "flag_rate": 0.22535211267605634,
+      "flag_rate_ci": [
+        0.17439430045122228,
+        0.2860409842202984
+      ],
+      "group": "frequent (10+ prior)",
+      "insufficient_reason": "",
+      "n_flagged": 48,
+      "n_orders": 213,
+      "n_positives": 43,
+      "net_inr_per_1000": 5028.169014084507,
+      "precision": 0.4583333333333333,
+      "precision_ci": [
+        0.32575242292867446,
+        0.5970892545435019
+      ],
+      "recall": 0.5116279069767442,
+      "rto_rate": 0.20187793427230047,
+      "rto_rate_ci": [
+        0.15347250119907369,
+        0.26084614113667953
+      ],
+      "sufficient": true
+    },
+    {
+      "cohort": "customer_history_band",
+      "flag_rate": 0.21298701298701297,
+      "flag_rate_ci": [
+        0.185530355375785,
+        0.24329321699575512
+      ],
+      "group": "light (1-2 prior)",
+      "insufficient_reason": "",
+      "n_flagged": 164,
+      "n_orders": 770,
+      "n_positives": 143,
+      "net_inr_per_1000": 5760.3896103896095,
+      "precision": 0.4817073170731707,
+      "precision_ci": [
+        0.40653251804101626,
+        0.5577194609267676
+      ],
+      "recall": 0.5524475524475524,
+      "rto_rate": 0.18571428571428572,
+      "rto_rate_ci": [
+        0.1598311590110279,
+        0.21471773019219703
+      ],
+      "sufficient": true
+    },
+    {
+      "cohort": "customer_history_band",
+      "flag_rate": 0.10894941634241245,
+      "flag_rate_ci": [
+        0.0764609628045696,
+        0.15295601366553185
+      ],
+      "group": "new (0 prior)",
+      "insufficient_reason": "only 28 flagged orders, below the minimum of 30 for a precision figure to mean anything",
+      "n_flagged": 28,
+      "n_orders": 257,
+      "n_positives": 51,
+      "net_inr_per_1000": 198.44357976653694,
+      "precision": 0.35714285714285715,
+      "precision_ci": [
+        0.2070582950773768,
+        0.5416969348557219
+      ],
+      "recall": 0.19607843137254902,
+      "rto_rate": 0.19844357976653695,
+      "rto_rate_ci": [
+        0.1542813312895977,
+        0.2514879789236646
+      ],
+      "sufficient": false
+    },
+    {
+      "cohort": "customer_history_band",
+      "flag_rate": 0.18639798488664988,
+      "flag_rate_ci": [
+        0.1608438346408192,
+        0.21497200634580482
+      ],
+      "group": "regular (3-9 prior)",
+      "insufficient_reason": "",
+      "n_flagged": 148,
+      "n_orders": 794,
+      "n_positives": 151,
+      "net_inr_per_1000": 6241.813602015113,
+      "precision": 0.5135135135135135,
+      "precision_ci": [
+        0.4336714275713848,
+        0.5926718388267831
+      ],
+      "recall": 0.5033112582781457,
+      "rto_rate": 0.190176322418136,
+      "rto_rate_ci": [
+        0.16439625835670252,
+        0.21893987370237178
+      ],
+      "sufficient": true
+    },
+    {
+      "cohort": "payment_method",
+      "flag_rate": 0.31673469387755104,
+      "flag_rate_ci": [
+        0.29129114895471964,
+        0.3433240434469915
+      ],
+      "group": "cod",
+      "insufficient_reason": "",
+      "n_flagged": 388,
+      "n_orders": 1225,
+      "n_positives": 365,
+      "net_inr_per_1000": 8582.448979591836,
+      "precision": 0.48195876288659795,
+      "precision_ci": [
+        0.43266097637979195,
+        0.5316102877122338
+      ],
+      "recall": 0.5123287671232877,
+      "rto_rate": 0.2979591836734694,
+      "rto_rate_ci": [
+        0.27301127330322644,
+        0.32417028624877137
+      ],
+      "sufficient": true
+    },
+    {
+      "cohort": "payment_method",
+      "flag_rate": 0.0,
+      "flag_rate_ci": [
+        0.0,
+        0.004725963198613764
+      ],
+      "group": "prepaid",
+      "insufficient_reason": "only 0 flagged orders, below the minimum of 30 for a precision figure to mean anything",
+      "n_flagged": 0,
+      "n_orders": 809,
+      "n_positives": 23,
+      "net_inr_per_1000": 0.0,
+      "precision": null,
+      "precision_ci": null,
+      "recall": 0.0,
+      "rto_rate": 0.02843016069221261,
+      "rto_rate_ci": [
+        0.01901804468470774,
+        0.04229952011200709
+      ],
+      "sufficient": false
+    }
+  ],
+  "split": "validation",
+  "threshold": 0.34814814814814815
+}

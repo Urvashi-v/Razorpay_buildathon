@@ -17,9 +17,10 @@ No model loaded means ``503 MODEL_UNAVAILABLE``. It does not mean a default
 probability, a base-rate guess, or a cached score from a similar order. A system
 that cannot score an order says so.
 
-STATUS: Phase 3. The contract below is fixed and documented in OpenAPI now, so
-the console can be built against it; the implementation returns an explicit 501
-until the model lands rather than fabricating a plausible response.
+Implemented against the real artefact: the request loads the stored order, runs
+the feature pipeline over the merchant's book as of that order's timestamp,
+scores it with the calibrated model, and passes the probability to the
+deterministic decision engine. Nothing here synthesises a number.
 """
 
 from __future__ import annotations

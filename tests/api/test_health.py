@@ -16,6 +16,7 @@ from fastapi.testclient import TestClient
 
 from rto_sentinel.api.main import create_app
 from rto_sentinel.settings import get_settings
+from tests.unit.test_model_registry import write_artefact
 
 
 @pytest.fixture
@@ -45,7 +46,9 @@ def test_readiness_reports_a_missing_model_as_not_ready(client: TestClient) -> N
     body = response.json()
     assert body["ready"] is False
     assert body["components"]["model"]["ready"] is False
-    assert "will not invent a probability" in body["components"]["model"]["detail"]
+    # The wording comes from the registry itself, so this asserts that readiness
+    # is reporting the scoring path's own reason rather than a parallel one.
+    assert "will not serve a synthesised probability" in body["components"]["model"]["detail"]
 
 
 def test_readiness_stays_ready_without_the_language_layer(client: TestClient) -> None:
@@ -63,13 +66,19 @@ def test_readiness_stays_ready_without_the_language_layer(client: TestClient) ->
     assert not_ready == {"model", "agents"}
 
 
-def test_readiness_becomes_ready_once_a_model_artefact_exists(
+def test_readiness_becomes_ready_once_a_servable_artefact_exists(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """The readiness gate flips on the artefact actually being present on disk."""
-    artefact = tmp_path / "model.pkl"
-    artefact.write_bytes(b"not a real model, but a real file")
-    monkeypatch.setenv("RTO_ACTIVE_MODEL_PATH", str(artefact))
+    """The readiness gate flips on the registry being able to resolve an artefact.
+
+    Readiness asks the registry the same question the scoring path asks, rather
+    than checking the environment variable itself. Note what this test does
+    *not* do: it does not set `RTO_ACTIVE_MODEL_PATH`. An unset pin means "serve
+    the newest calibrated artefact", which is a perfectly servable instance -
+    and the earlier implementation reported it unready.
+    """
+    write_artefact(tmp_path, "lightgbm_platt")
+    monkeypatch.setenv("RTO_ARTIFACT_DIR", str(tmp_path))
     get_settings.cache_clear()
 
     with TestClient(create_app(), raise_server_exceptions=False) as client:
@@ -78,18 +87,40 @@ def test_readiness_becomes_ready_once_a_model_artefact_exists(
         body = response.json()
         assert body["ready"] is True
         assert body["components"]["model"]["ready"] is True
+        detail = body["components"]["model"]["detail"]
+        assert "lightgbm_platt" in detail
+        assert "newest in store" in detail
+
+
+def test_readiness_reports_a_pin_as_a_pin(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Which artefact is serving, and whether it was chosen or pinned, is visible."""
+    write_artefact(tmp_path, "newest")
+    pinned = write_artefact(tmp_path, "pinned_version")
+    monkeypatch.setenv("RTO_ARTIFACT_DIR", str(tmp_path))
+    monkeypatch.setenv("RTO_ACTIVE_MODEL_PATH", str(pinned))
+    get_settings.cache_clear()
+
+    with TestClient(create_app(), raise_server_exceptions=False) as client:
+        body = client.get("/readiness").json()
+        assert body["ready"] is True
+        detail = body["components"]["model"]["detail"]
+        assert "pinned_version" in detail
+        assert "(pinned)" in detail
 
 
 def test_readiness_flags_a_configured_but_missing_artefact(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    monkeypatch.setenv("RTO_ACTIVE_MODEL_PATH", str(tmp_path / "absent.pkl"))
+    """A pin that resolves to nothing fails readiness - it does not fall back."""
+    write_artefact(tmp_path, "healthy")
+    monkeypatch.setenv("RTO_ARTIFACT_DIR", str(tmp_path))
+    monkeypatch.setenv("RTO_ACTIVE_MODEL_PATH", str(tmp_path / "models" / "absent"))
     get_settings.cache_clear()
 
     with TestClient(create_app(), raise_server_exceptions=False) as client:
         body = client.get("/readiness").json()
         assert body["ready"] is False
-        assert "not found" in body["components"]["model"]["detail"]
+        assert "not a readable artefact directory" in body["components"]["model"]["detail"]
 
 
 def test_readiness_never_leaks_the_database_password(

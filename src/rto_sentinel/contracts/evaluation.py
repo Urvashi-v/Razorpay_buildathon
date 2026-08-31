@@ -159,7 +159,23 @@ class EconomicResult(BaseModel):
 
 
 class CohortResult(BaseModel):
-    """One slice of the cohort or fairness breakdown."""
+    """One slice of the cohort or fairness breakdown.
+
+    WHY EVERY RATE CARRIES AN INTERVAL AND A SUFFICIENCY FLAG
+    ---------------------------------------------------------
+    Cohort tables are where small samples do their worst damage. Split a 1,698-row
+    test set five ways and some group will hold forty orders, six of which are
+    positives; its precision will read 0.83 or 0.17 depending on which way two
+    orders fell, and a reader scanning a column of numbers has no way to see
+    that. Presenting such a figure next to one computed on nine hundred orders
+    invites a conclusion the data cannot support.
+
+    So each rate is accompanied by a Wilson interval, and ``sufficient`` records
+    whether the group cleared the configured minimum support. A group that did
+    not is reported - suppressing it would hide exactly the groups a fairness
+    audit exists to look at - but it is reported as an observation, not as
+    evidence, and it is excluded from the disparity trigger.
+    """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -171,13 +187,48 @@ class CohortResult(BaseModel):
     recall: float | None = Field(default=None, ge=0.0, le=1.0)
     net_inr_per_1000: float | None = None
 
+    #: Observed RTO rate in this group. The base rate a reader needs before any
+    #: flag rate means anything: a group flagged twice as often as another is
+    #: unremarkable if it also returns twice as often.
+    rto_rate: float | None = Field(default=None, ge=0.0, le=1.0)
+    n_positives: int = Field(default=0, ge=0)
+    n_flagged: int = Field(default=0, ge=0)
+
+    #: Wilson score intervals. Chosen over the normal approximation because the
+    #: normal interval is worst exactly where cohort tables are most fragile -
+    #: small n, proportions near 0 or 1 - where it produces bounds outside [0, 1]
+    #: and coverage well below its nominal level.
+    flag_rate_ci: tuple[float, float] | None = None
+    precision_ci: tuple[float, float] | None = None
+    rto_rate_ci: tuple[float, float] | None = None
+
+    #: False when the group is below the configured minimum support, or when the
+    #: metric has no denominator (precision with nothing flagged).
+    sufficient: bool = True
+    insufficient_reason: str = Field(default="", max_length=256)
+
+    @property
+    def is_reportable_evidence(self) -> bool:
+        """Whether this row may be used to support a claim, as opposed to shown."""
+        return self.sufficient and self.n_orders > 0
+
 
 class FairnessAudit(BaseModel):
-    """Disparate-impact review across pincode tier and order-value band.
+    """Disparate-impact review across defensible operational cohorts.
 
     ``triggered`` is True when a group is flagged materially more often *and*
     with materially worse precision. That is the condition under which the
     geography features get pulled back - reported either way.
+
+    WHAT THIS AUDIT IS NOT
+    ----------------------
+    It does not examine any sensitive characteristic, because none exists in this
+    data and none may be inferred. There is no gender, religion, caste, ethnicity
+    or age here - not withheld, not present. The cohorts are operational:
+    delivery-area tier, order value, customer history depth, payment method. The
+    question is whether the system transfers cost onto an operational group
+    beyond what its precision justifies, which is answerable from what is
+    recorded. See ``docs/responsible_ai.md``.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -187,6 +238,17 @@ class FairnessAudit(BaseModel):
     worst_precision_drop: float
     triggered: bool
     narrative: str = Field(default="", max_length=4000)
+
+    #: Which cohorts were examined, and which groups were too small to count as
+    #: evidence. Both belong in the record: an audit that quietly dropped its
+    #: thin groups would report a cleaner result than it measured.
+    cohorts_examined: tuple[str, ...] = ()
+    groups_below_support: tuple[str, ...] = ()
+    min_support: int = Field(default=0, ge=0)
+
+    #: The pair that produced ``max_flag_rate_ratio``, so a reader can check it.
+    most_flagged_group: str = Field(default="", max_length=128)
+    least_flagged_group: str = Field(default="", max_length=128)
 
 
 class EvaluationReport(BaseModel):

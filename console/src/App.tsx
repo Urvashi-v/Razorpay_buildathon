@@ -1,58 +1,94 @@
-import BackendStatus from '@/components/BackendStatus';
-
 /**
  * The console shell.
  *
- * Phase 1 deliberately ships the shell and the backend connection, and nothing
- * more. The order queue, the threshold sliders, the reliability diagram and the
- * fairness breakdown are Phase 4 - and building their UI before the endpoints
- * that feed them exist would mean populating charts with invented numbers, which
- * is the failure mode this whole project argues against.
+ * Six screens, each a client of the real backend. Nothing in this application
+ * computes a risk score, a threshold, a band or a rupee figure: every number
+ * displayed arrived in a response, and when a request fails the screen says so
+ * rather than showing a plausible substitute.
  *
- * So what is here is real: a live readiness panel that reads the API and reports
- * what it finds, including when what it finds is "no model loaded".
+ * Navigation is local state rather than a router. There is one router-shaped
+ * requirement here - deep-linking to an order - and it is met by the order id
+ * living in this component and being passed down. Adding a routing dependency
+ * for that would be more moving parts than the problem has.
  */
 
-const PLANNED = [
-  { phase: 'Phase 1', label: 'Architecture, contracts, config, API skeleton', done: true },
-  { phase: 'Phase 2', label: 'Synthetic generator, splits, cost model, threshold derivation' },
-  { phase: 'Phase 3', label: 'Baseline ladder rungs 0-5, isotonic calibration' },
-  { phase: 'Phase 4', label: 'Evaluation harness, fairness audit, order queue, sliders' },
-  { phase: 'Phase 5', label: 'Reason codes, confirmations, digest, address repair' },
-  { phase: 'Phase 6', label: 'Drift monitoring, outcome loop, control holdout' },
+import { useState } from 'react';
+
+import BackendStatus from '@/components/BackendStatus';
+import Dashboard from '@/pages/Dashboard';
+import EconomicSimulator from '@/pages/EconomicSimulator';
+import Evaluation from '@/pages/Evaluation';
+import OrderInvestigation from '@/pages/OrderInvestigation';
+import OrderQueue from '@/pages/OrderQueue';
+
+type Screen = 'dashboard' | 'queue' | 'investigation' | 'simulator' | 'evaluation';
+
+const NAV: { id: Screen; label: string; hint: string }[] = [
+  { id: 'dashboard', label: 'Dashboard', hint: 'Order book, model in service, economics' },
+  { id: 'queue', label: 'Order queue', hint: 'Real orders, filtered server-side' },
+  { id: 'investigation', label: 'Investigate', hint: 'Score one order end to end' },
+  { id: 'simulator', label: 'Simulator', hint: 'Change the economics, recompute the policy' },
+  { id: 'evaluation', label: 'Evaluation', hint: 'Measured metrics, validation vs sealed test' },
 ];
 
 export default function App(): JSX.Element {
+  const [screen, setScreen] = useState<Screen>('dashboard');
+  const [orderId, setOrderId] = useState<string | null>(null);
+
+  function investigate(id: string): void {
+    setOrderId(id);
+    setScreen('investigation');
+  }
+
   return (
     <div className="app-shell">
       <header className="app-header">
-        <h1>RTO Sentinel</h1>
-        <p>
-          A cost-calibrated return-risk scorer for Indian COD commerce — that knows what a false
-          positive costs.
-        </p>
+        <div>
+          <h1>RTO Sentinel</h1>
+          <p className="app-header__tagline">
+            A cost-calibrated return-risk scorer for Indian COD commerce — that knows what a false
+            positive costs.
+          </p>
+        </div>
+        <BackendStatus />
       </header>
 
-      <BackendStatus />
-
-      <section className="card">
-        <h2>What is built</h2>
-        <ul className="phase-list">
-          {PLANNED.map((item) => (
-            <li key={item.phase} className={item.done ? 'done' : undefined}>
-              <strong>{item.phase}</strong> — {item.label}
-              {item.done ? ' ✓' : ''}
+      <nav className="app-nav" aria-label="Console sections">
+        <ul>
+          {NAV.map((item) => (
+            <li key={item.id}>
+              <button
+                type="button"
+                className={`nav-button${screen === item.id ? ' nav-button--active' : ''}`}
+                aria-current={screen === item.id ? 'page' : undefined}
+                onClick={() => setScreen(item.id)}
+              >
+                <span className="nav-button__label">{item.label}</span>
+                <span className="nav-button__hint">{item.hint}</span>
+              </button>
             </li>
           ))}
         </ul>
-      </section>
+      </nav>
 
-      <p className="notice notice--provenance">
-        <strong>Data provenance.</strong> Models in this project are trained on synthetic data
-        generated from published Indian RTO base rates. Absolute metric values are not a claim
-        about production performance. Every figure this console displays is read from the backend;
-        none is computed or held here.
-      </p>
+      <main>
+        {screen === 'dashboard' ? <Dashboard /> : null}
+        {screen === 'queue' ? <OrderQueue onSelect={investigate} /> : null}
+        {screen === 'investigation' ? (
+          <OrderInvestigation orderId={orderId} onOrderIdChange={setOrderId} />
+        ) : null}
+        {screen === 'simulator' ? <EconomicSimulator /> : null}
+        {screen === 'evaluation' ? <Evaluation /> : null}
+      </main>
+
+      <footer className="app-footer">
+        <p>
+          <strong>Data provenance.</strong> Models in this project are trained on synthetic data
+          generated from published Indian RTO base rates. Absolute metric values are not a claim
+          about production performance. Every figure this console displays is read from the
+          backend; none is computed or held here.
+        </p>
+      </footer>
     </div>
   );
 }
