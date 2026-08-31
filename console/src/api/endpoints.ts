@@ -28,6 +28,9 @@ import type {
   SimulationResult,
   ThresholdDerivation,
   ToolCatalogueEntry,
+  DriftReport,
+  FairnessResponse,
+  ShiftStudy,
 } from '@/types/api';
 
 /** Build a query string, dropping anything unset. */
@@ -202,3 +205,24 @@ export const investigateOrder = (
     undefined,
     signal,
   );
+
+// --- responsible AI ----------------------------------------------------------
+
+/**
+ * The cohort and disparate-impact audit.
+ *
+ * Throws `ApiError('NOT_IMPLEMENTED')` when the audit has not been run. The UI
+ * shows that reason rather than an empty table, because an empty fairness table
+ * reads as "we checked and found nothing".
+ */
+export const fetchFairness = (
+  split: 'validation' | 'test' = 'validation',
+  signal?: AbortSignal,
+): Promise<FairnessResponse> =>
+  get<FairnessResponse>(`/v1/evaluation/fairness${query({ split })}`, signal);
+
+export const fetchShiftStudy = (signal?: AbortSignal): Promise<ShiftStudy> =>
+  get<ShiftStudy>('/v1/evaluation/shift', signal);
+
+export const fetchDriftReport = (signal?: AbortSignal): Promise<DriftReport> =>
+  get<DriftReport>('/v1/monitoring/drift', signal);

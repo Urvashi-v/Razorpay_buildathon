@@ -7,7 +7,12 @@ change in NET RUPEES, not in AUC. A family that adds ranking quality but no mone
 has not earned its place - and the geography family in particular has to justify
 its fairness cost with a real economic contribution, not merely a lift.
 
-STATUS: Phase 4.
+STATUS: NOT IMPLEMENTED and not run.
+
+The interface is fixed and the config declares the families, but no ablation
+has been executed. Any statement elsewhere in this codebase about what the
+ablation "will show" is a prediction, not a result - and several feature
+docstrings were corrected to say so.
 """
 
 from __future__ import annotations
@@ -28,4 +33,8 @@ class AblationResult:
 
 def run_ablation(families: list[str]) -> list[AblationResult]:
     """Retrain with each family removed in turn and report the deltas."""
-    raise NotImplementedError("Ablation study lands in Phase 4.")
+    raise NotImplementedError(
+        "The leave-one-family-out ablation has not been implemented or run. No "
+        "claim about any feature family's economic contribution is supported by "
+        "this repository."
+    )

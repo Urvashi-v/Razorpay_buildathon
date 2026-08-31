@@ -143,6 +143,45 @@ def test_agents_cannot_reach_the_decision_engine_or_models(source_root: Path) ->
     )
 
 
+#: The one module in `serving` that the agent layer may reach for.
+#:
+#: `serving` is not on the forbidden-imports list because the agent layer has to
+#: get its evidence from somewhere, and `serving.agent_tools` is that somewhere -
+#: a registry of six read-only `get_` tools with an `invoke` that dispatches by
+#: name and refuses anything not registered.
+#:
+#: But "not forbidden" is not the same as "bounded". Nothing stopped a later
+#: edit adding `from rto_sentinel.serving.scoring import score` to an agent
+#: module, which would hand the language layer the very capability every other
+#: rule here exists to withhold. This narrows the door to the one module.
+AGENT_SERVING_ENTRYPOINT = "agent_tools"
+
+
+def test_agents_reach_serving_only_through_the_tool_registry(source_root: Path) -> None:
+    """The agent layer may import `serving.agent_tools`, and nothing else in serving.
+
+    `serving` also contains `scoring`, `assessment`, `features` and
+    `model_registry` - a probability, a decision, a feature matrix and a loaded
+    booster respectively. Any one of those imported into `agents` would defeat
+    the separation the other tests assert, without tripping any of them.
+    """
+    offenders: list[str] = []
+    for path in sorted((source_root / "agents").rglob("*.py")):
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+            stripped = line.strip()
+            if "rto_sentinel.serving" not in stripped or stripped.startswith("#"):
+                continue
+            if f"rto_sentinel.serving.{AGENT_SERVING_ENTRYPOINT}" in stripped:
+                continue
+            offenders.append(f"{path.name}:{number}: {stripped}")
+
+    assert not offenders, (
+        "The agent layer may only reach serving through "
+        f"`serving.{AGENT_SERVING_ENTRYPOINT}`, the read-only tool registry. "
+        f"Found: {offenders}"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Separation of concerns
 # ---------------------------------------------------------------------------
@@ -194,8 +233,13 @@ def test_ml_layers_do_not_import_the_web_or_database_layer(source_root: Path) ->
     Training reads files and writes artefacts. If the ML layer needed the API or
     the database, a model could not be retrained offline - and the pipeline would
     stop being reproducible from config plus seed alone.
+
+    `monitoring` is held to the same rule. Drift is computed over two frames; it
+    must not care whether they came from a parquet file, a database or a live
+    stream, because the moment it does, the arithmetic can only be tested against
+    a running service.
     """
-    for layer in ("data", "features", "models", "eval"):
+    for layer in ("data", "features", "models", "eval", "monitoring"):
         found = _violations(
             source_root,
             layer,

@@ -101,17 +101,30 @@ def test_the_label_lives_in_its_own_table() -> None:
 
 
 def test_decision_log_is_append_only_by_construction() -> None:
-    """No ``updated_at``, and the repository exposes no update method.
+    """No ``updated_at``, and the repositories that write expose no update method.
 
     An audit trail that can be edited is not an audit trail. A changed decision
     is a new row.
+
+    This asserts against `DecisionLogRepository` and `OpsOverrideRepository` -
+    the classes that actually write. It previously asserted against
+    `DecisionRepository`, a Phase 1 sketch whose every write method raised
+    `NotImplementedError` and which nothing had used since Phase 7. The property
+    held trivially because the class could not write at all, so the test passed
+    while saying nothing about the code that does. The sketch was deleted in
+    Phase 11 and this now points at the live path.
     """
     assert "updated_at" not in Decision.__table__.columns
+    assert "updated_at" not in OpsOverrideRecord.__table__.columns
 
-    from rto_sentinel.db.repositories import DecisionRepository
+    from rto_sentinel.db.repositories import DecisionLogRepository, OpsOverrideRepository
 
-    methods = {name for name in dir(DecisionRepository) if not name.startswith("_")}
-    assert not {"update", "update_decision", "delete", "modify"} & methods
+    forbidden = {"update", "update_decision", "delete", "modify", "edit", "overwrite"}
+    for repository in (DecisionLogRepository, OpsOverrideRepository):
+        methods = {name for name in dir(repository) if not name.startswith("_")}
+        assert not forbidden & methods, f"{repository.__name__} exposes a mutating method"
+        # The only way a row enters either log.
+        assert "append" in methods
 
 
 def test_decision_row_carries_full_provenance() -> None:

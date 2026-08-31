@@ -23,7 +23,7 @@ run wins, which is defined rather than arbitrary.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Path, Query, status
 from pydantic import BaseModel, Field
@@ -273,12 +273,33 @@ def assessment_response(assessment: OrderAssessment) -> RiskAssessmentResponse:
     )
 
 
+#: `split` is a closed set, so an unknown value is rejected rather than answered.
+#:
+#: It previously accepted any string under 32 characters. There was no injection
+#: risk - every query is built with SQLAlchemy's expression language and bound
+#: parameters - but `?split=typo` returned `{"orders": [], "total": 0}` with a
+#: 200, and "no orders are in that split" is indistinguishable from "that split
+#: does not exist". A merchant filtering by a mistyped split would conclude their
+#: book was empty. `payment_method` next to it was already constrained this way.
+SplitFilter = Annotated[
+    Literal[
+        "train",
+        "validation",
+        "test",
+        "excluded_immature",
+        "excluded_group_protocol",
+    ]
+    | None,
+    Query(description="Modelling split; unknown values are rejected, not silently empty"),
+]
+
+
 @router.get("", response_model=OrderPageResponse, summary="List stored orders")
 def list_orders(
     repository: ServingRepositoryDep,
     merchant_id: Annotated[str | None, Query(max_length=64)] = None,
     customer_hash: Annotated[str | None, Query(max_length=64)] = None,
-    split: Annotated[str | None, Query(max_length=32)] = None,
+    split: SplitFilter = None,
     payment_method: Annotated[str | None, Query(pattern=r"^(cod|prepaid)$")] = None,
     dataset_run: DatasetRunQuery = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,

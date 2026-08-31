@@ -21,9 +21,6 @@ from rto_sentinel.db.models import (
 )
 from rto_sentinel.db.repositories import (
     DatasetRepository,
-    DecisionRepository,
-    OrderRepository,
-    OverrideRepository,
     ReadOnlyRepository,
 )
 from rto_sentinel.db.session import get_engine, get_session_factory, reset_engine, session_scope
@@ -35,14 +32,11 @@ __all__ = [
     "DatasetRepository",
     "DatasetRun",
     "Decision",
-    "DecisionRepository",
     "DeliveryEvent",
     "ModelRun",
     "OpsOverrideRecord",
     "Order",
     "OrderOutcomeRecord",
-    "OrderRepository",
-    "OverrideRepository",
     "ReadOnlyRepository",
     "SimulationLatent",
     "TimestampMixin",

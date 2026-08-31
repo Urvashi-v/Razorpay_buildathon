@@ -20,6 +20,7 @@ production traffic.
 | **Investigation** | `/v1/orders/{id}/risk` | One order scored end to end by the real pipeline |
 | **Simulator** | `/v1/economics/cost-profiles`, `POST /v1/economics/simulate` | The backend re-derives the threshold and re-prices the book |
 | **Evaluation** | `/v1/evaluation/final`, `/v1/evaluation/ladder` | Validation and sealed test kept in separate columns |
+| **Fairness & drift** | `/v1/evaluation/fairness`, `/v1/evaluation/shift`, `/v1/monitoring/drift` | Cohort audit with intervals, the shift study, and drift that never reads as failure |
 
 ---
 
@@ -108,13 +109,41 @@ Typecheck, lint, test and build all run from `scripts/check.sh`.
 
 ---
 
+### 5. A thin cohort never looks like a solid one
+
+On the fairness screen, a group below the minimum support is shown — suppressing
+thin groups would hide exactly what an audit exists to look at — but the row is
+de-emphasised and carries a "too thin to read" marker. Opacity alone would fail
+anyone who cannot perceive it, so the marker is text.
+
+Every rate is printed with its Wilson interval, so a reader sees the precision of
+the estimate at the same moment they see the estimate. A cohort table without
+intervals invites comparing 0.44 against 0.47 as though the difference were real.
+
+### 6. Drift is shown as distance, never as failure
+
+The distances table and the labelled comparisons are separate sections with
+separate headings. When the current window has no matured outcomes, a banner says
+so before anything else and the labelled section says "this is the honest empty
+state, not a passing result". The severity badges read `stable` / `watch` /
+`investigate` and are deliberately not a red-amber-green palette.
+
+The shift table leads with **PR-AUC lift**, not raw PR-AUC. Raw PR-AUC is present
+but muted, because a random ranker scores PR-AUC equal to the positive rate — so
+raw PR-AUC rises when the base rate rises, and leading with it would report the
+arithmetic of the base rate as a property of the model.
+
+---
+
 ## Not built
 
-**The fairness screen.** The cohort audit has not been run, so
-`/v1/evaluation/fairness` returns 501 with its reason. A screen built against it
-would have nothing true to display, and a screen that displayed something anyway
-would be the exact failure this console is designed to avoid. **No fairness claim
-should be made about this model.**
+**Nothing on this console is a stub.** Each screen either shows backend data or
+shows the backend's reason for not having any.
+
+Where an experiment has not been run, the endpoint returns 501 with its reason
+and the screen renders that reason rather than an empty table — an empty fairness
+table reads as "we checked and found nothing", which is a different and much
+worse claim than "we have not checked".
 
 ---
 

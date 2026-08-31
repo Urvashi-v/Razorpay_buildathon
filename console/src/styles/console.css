@@ -672,3 +672,100 @@
   white-space: nowrap;
   border: 0;
 }
+
+/* --- responsible AI screen ------------------------------------------------ */
+
+/*
+ * A thin cohort must never look like a solid one.
+ *
+ * The row is shown - suppressing it would hide exactly what the audit exists to
+ * look at - but it is visibly de-emphasised so a reader scanning a column cannot
+ * mistake a precision computed on nine flagged orders for one computed on nine
+ * hundred. Opacity alone would fail for anyone who cannot perceive it, so the
+ * row also carries a text marker.
+ */
+.row--thin {
+  opacity: 0.62;
+}
+
+.row--thin th[scope='row'] {
+  font-style: italic;
+}
+
+.row--reference {
+  border-left: 3px solid var(--accent, #6ea8fe);
+}
+
+.tag--thin {
+  margin-left: 0.5rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 3px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  background: var(--surface-3, #2a2d33);
+  color: var(--text-muted, #9aa0a6);
+  white-space: nowrap;
+}
+
+/* A Wilson interval, printed small next to its estimate. */
+.interval {
+  display: inline-block;
+  margin-left: 0.3rem;
+  font-size: 0.72rem;
+  color: var(--text-muted, #9aa0a6);
+  white-space: nowrap;
+}
+
+/*
+ * The raw PR-AUC column. Present because it is what was measured, muted because
+ * comparing it across environments with different base rates is a mistake.
+ */
+.muted {
+  color: var(--text-muted, #9aa0a6);
+}
+
+.bad {
+  color: var(--danger, #f28b82);
+  font-weight: 600;
+}
+
+/*
+ * Drift severities read as "how far did it move", never as pass/fail. The
+ * palette is deliberately not red/amber/green: "investigate" is a prompt to go
+ * and look, not an incident.
+ */
+.badge--drift-stable {
+  background: var(--surface-3, #2a2d33);
+  color: var(--text-muted, #9aa0a6);
+}
+
+.badge--drift-watch {
+  background: rgba(230, 180, 80, 0.16);
+  color: #e6b450;
+}
+
+.badge--drift-investigate {
+  background: rgba(120, 160, 240, 0.18);
+  color: #8ab4f8;
+}
+
+.definitions {
+  margin: 0.5rem 0 1rem;
+}
+
+.definitions > div {
+  margin-bottom: 0.85rem;
+}
+
+.definitions dt {
+  font-weight: 600;
+  margin-bottom: 0.2rem;
+}
+
+.definitions dd {
+  margin: 0 0 0 1rem;
+  color: var(--text-secondary, #c4c7c5);
+  font-size: 0.9rem;
+}

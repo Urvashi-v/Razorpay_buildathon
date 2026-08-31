@@ -2,7 +2,8 @@
 
 ``GET /v1/evaluation/ladder``       every rung, scored identically
 ``GET /v1/evaluation/reliability``  the reliability diagram bins
-``GET /v1/evaluation/fairness``     flag rate and precision by tier and value band
+``GET /v1/evaluation/fairness``     cohort breakdown and the disparate-impact review
+``GET /v1/evaluation/shift``        the controlled distribution-shift study
 
 THE DASHBOARD READS THESE. IT DOES NOT HOLD NUMBERS OF ITS OWN.
 ---------------------------------------------------------------
@@ -16,7 +17,6 @@ The fairness endpoint returns its slices whether or not the disparity trigger
 fired. Reporting only the flattering runs would defeat the point of having an
 audit at all.
 
-STATUS: Phase 4.
 """
 
 from __future__ import annotations
@@ -25,13 +25,15 @@ from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Query, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from rto_sentinel.api.deps import SettingsDep
 from rto_sentinel.api.errors import ApiError, ErrorCode, ErrorResponse
-from rto_sentinel.contracts.evaluation import CalibrationMetrics
+from rto_sentinel.contracts.evaluation import CalibrationMetrics, CohortResult, FairnessAudit
 from rto_sentinel.contracts.experiment import LadderResults
 from rto_sentinel.contracts.final import FinalEvaluation, SelectionManifest
+from rto_sentinel.contracts.monitoring import ShiftStudy
+from rto_sentinel.eval.responsible_report import RESPONSIBLE_DIR, read_contract_payload
 from rto_sentinel.models.final import FINAL_DIR, load_evaluation, load_manifest
 
 router = APIRouter(prefix="/v1/evaluation", tags=["evaluation"])
@@ -370,30 +372,81 @@ def reliability(settings: SettingsDep, split: SPLITS = "validation") -> Calibrat
     return evaluation.calibration
 
 
+class FairnessResponse(BaseModel):
+    """The audit, exactly as the harness wrote it."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    generated_at: str
+    dataset_run_id: str
+    split: str
+    model_version: str
+    threshold: float
+    disclaimer: str
+    audit: FairnessAudit
+    slices: tuple[CohortResult, ...]
+
+
 @router.get(
     "/fairness",
-    summary="Flag rate and precision by pincode tier and order-value band",
+    response_model=FairnessResponse,
+    summary="Cohort breakdown and disparate-impact review over operational cohorts",
     responses={501: {"model": ErrorResponse, "description": "The audit has not been run"}},
 )
-def fairness(settings: SettingsDep) -> dict[str, object]:
-    """The disparate-impact review.
+def fairness(settings: SettingsDep, split: SPLITS = "validation") -> FairnessResponse:
+    """The disparate-impact review, read from the artefact the audit wrote.
 
-    NOT IMPLEMENTED, AND THAT IS THE HONEST ANSWER
-    ----------------------------------------------
-    The cohort audit is defined in ``config/evaluation.yaml`` and has never been
-    run. Returning a plausible-looking breakdown here would be the single most
-    damaging fake in this API: a fairness report nobody computed, presented as
-    evidence that the model was checked.
+    Returns the slices whether or not the disparity trigger fired. Reporting only
+    the flattering runs would defeat the point of having an audit at all.
 
-    The 501 carries the reason. No fairness claim about this model should be made
-    until the audit exists.
+    When the audit has not been run this still returns 501 with its reason. That
+    is not a placeholder: a fairness report nobody computed, presented as evidence
+    the model was checked, is the single most damaging fake this API could serve.
+
+    **The cohorts are operational, never sensitive.** No gender, religion, caste,
+    ethnicity, age or income is examined or inferred - none exists in this data,
+    and `eval/fairness.py` refuses by name any cohort that looks like one.
     """
-    raise ApiError(
-        ErrorCode.NOT_IMPLEMENTED,
-        "The cohort and fairness audit has not been run. It is defined in "
-        "config/evaluation.yaml and no results exist. This endpoint returns 501 rather "
-        "than a fabricated breakdown: a fairness report nobody computed is worse than "
-        "none. No fairness claim about this model should be made until it is run.",
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail={"config": "config/evaluation.yaml", "status": "not_run"},
-    )
+    path = settings.artifact_path / RESPONSIBLE_DIR / f"fairness__{split}.json"
+    if not path.is_file():
+        raise ApiError(
+            ErrorCode.NOT_IMPLEMENTED,
+            f"The cohort and fairness audit has not been run for the {split} split. Run "
+            "`rto-sentinel fairness` to produce it. This endpoint returns 501 rather "
+            "than a fabricated breakdown: a fairness report nobody computed is worse "
+            "than none, and no fairness claim about this model should be made until it "
+            "is run.",
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail={"config": "config/evaluation.yaml", "status": "not_run", "split": split},
+        )
+    # The fairness envelope keeps `disclaimer` deliberately: unlike the shift and
+    # drift contracts it is a response model of this router's own, and a fairness
+    # table should not reach a consumer without the sentence that qualifies it.
+    return FairnessResponse.model_validate_json(path.read_text(encoding="utf-8"))
+
+
+@router.get(
+    "/shift",
+    response_model=ShiftStudy,
+    summary="Controlled distribution-shift study against the frozen model",
+    responses={501: {"model": ErrorResponse, "description": "The study has not been run"}},
+)
+def shift(settings: SettingsDep) -> ShiftStudy:
+    """How the frozen model behaves in deliberately perturbed worlds.
+
+    Each environment is a named change to a generator parameter - COD share, RTO
+    base rate, category mix, customer mix, geography mix - with the model and the
+    threshold held fixed. A fresh seed on the same distribution would measure
+    sampling variance and is not served here as robustness.
+    """
+    path = settings.artifact_path / RESPONSIBLE_DIR / "shift_study.json"
+    if not path.is_file():
+        raise ApiError(
+            ErrorCode.NOT_IMPLEMENTED,
+            "The distribution-shift study has not been run. Run `rto-sentinel shift` to "
+            "produce it. No robustness claim about this model should be made until it "
+            "exists.",
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail={"status": "not_run"},
+        )
+    return ShiftStudy.model_validate(read_contract_payload(path))

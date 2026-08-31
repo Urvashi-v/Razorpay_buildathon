@@ -6,8 +6,10 @@ impulse purchases are a documented RTO driver."
 That sentence is the honest framing and it is repeated here because it sets the
 expectation this family should be held to. Every feature here comes straight off
 the order payload, so there is no as-of question; the interesting question is
-whether they earn their place at all. The leave-one-family-out ablation in Phase 5
-reports that in rupees, and this family is the most likely candidate for removal.
+whether they earn their place at all. A leave-one-family-out ablation would
+report that in rupees and this family is the most likely candidate for removal -
+but that ablation is not implemented, so the candidacy is a suspicion rather
+than a measurement.
 
 A NOTE ON `hour_of_day`
 =======================

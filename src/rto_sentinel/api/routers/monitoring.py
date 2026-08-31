@@ -3,6 +3,7 @@
 ``GET /v1/monitoring/model``     the loaded artefact and its provenance
 ``GET /v1/monitoring/data``      what the database actually contains
 ``GET /v1/monitoring/decisions`` decisions taken, by band, and human overrides
+``GET /v1/monitoring/drift``     baseline period versus current period
 
 WHAT THIS IS NOT
 ================
@@ -29,12 +30,21 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
-from rto_sentinel.api.deps import DbSession, DecisionLogDep, ModelRegistryDep, OverrideRepositoryDep
+from rto_sentinel.api.deps import (
+    DbSession,
+    DecisionLogDep,
+    ModelRegistryDep,
+    OverrideRepositoryDep,
+    SettingsDep,
+)
+from rto_sentinel.api.errors import ApiError, ErrorCode, ErrorResponse
+from rto_sentinel.contracts.monitoring import DriftReport
 from rto_sentinel.db.models import DatasetRun, Order, OrderOutcomeRecord
+from rto_sentinel.eval.responsible_report import RESPONSIBLE_DIR, read_contract_payload
 
 router = APIRouter(prefix="/v1/monitoring", tags=["monitoring"])
 
@@ -214,3 +224,39 @@ def decision_status(
         overrides_by_direction=by_direction,
         override_rate=(total_overrides / total) if total else None,
     )
+
+
+@router.get(
+    "/drift",
+    response_model=DriftReport,
+    summary="Baseline period versus current period",
+    responses={501: {"model": ErrorResponse, "description": "No drift run exists"}},
+)
+def drift(settings: SettingsDep) -> DriftReport:
+    """The drift comparison, read from the artefact `rto-sentinel monitor` wrote.
+
+    **Drift is not failure, and this endpoint will not imply that it is.** A moved
+    input distribution is a fact about the world; whether quality degraded is a
+    separate question that needs labels. The two arrive in separate fields -
+    ``signals`` carries distances with no verdict attached, ``performance``
+    carries labelled comparisons - and ``labels_available`` says whether the
+    second question could be answered at all.
+
+    A consumer that renders only ``signals`` and shows green will be wrong in
+    exactly the situation that matters: a recent window whose orders have not
+    matured, where nothing can be measured and nothing is therefore alarming.
+    """
+    path = settings.artifact_path / RESPONSIBLE_DIR / "drift_report.json"
+    if not path.is_file():
+        raise ApiError(
+            ErrorCode.NOT_IMPLEMENTED,
+            "No drift comparison has been run. Run `rto-sentinel monitor` to produce "
+            "one. This endpoint returns 501 rather than an all-clear: a monitoring "
+            "page that reports stability without having measured anything is worse "
+            "than one that reports nothing.",
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail={"status": "not_run"},
+        )
+    # `read_contract_payload` strips the annotations written for readers who open
+    # the file directly; they are not part of the contract the console consumes.
+    return DriftReport.model_validate(read_contract_payload(path))

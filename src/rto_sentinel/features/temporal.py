@@ -26,7 +26,8 @@ THE BEHAVIOUR-CHANGE FEATURE
 longer-run baseline. A sudden burst of orders is a documented risk pattern - and
 it is the one feature here whose fairness note is not "low risk", because a
 legitimate seasonal shopper and an impulsive one look identical over a short
-window. It earns its place only if the ablation study in Phase 5 shows it pays.
+window. It earns its place only if an ablation shows it pays - and no ablation has
+been run, so nothing here has yet earned its place on that evidence.
 """
 
 from __future__ import annotations

@@ -1,0 +1,188 @@
+{
+  "baseline": {
+    "end": "2026-01-19T11:52:13Z",
+    "label": "baseline",
+    "n_matured": 1220,
+    "n_orders": 1220,
+    "start": "2026-01-05T00:34:58Z"
+  },
+  "current": {
+    "end": "2026-01-25T23:42:01Z",
+    "label": "current",
+    "n_matured": 814,
+    "n_orders": 814,
+    "start": "2026-01-19T11:53:16Z"
+  },
+  "data_provenance": "Synthetic benchmark data. Drift measured between two windows of the same simulated book; not evidence about production drift behaviour.",
+  "dataset_run_id": "7b5ae86219ac7cafe45e7d51",
+  "disclaimer": "Controlled benchmark experiment on synthetic data. Cohorts, shifts and drift windows are properties of the documented simulator in docs/simulator.md, not observations of real customers, real distribution shift, or real production behaviour. These results are evidence that the audit machinery works and that this model behaves a certain way on this benchmark. They are NOT evidence of production fairness or production robustness, and no such claim should be made from them.",
+  "feature_version": "1.0.0",
+  "generated_at": "2026-08-31T13:08:04.622084Z",
+  "labels_available": true,
+  "model_version": "a0d780424b79",
+  "performance": [
+    {
+      "baseline": 0.496559834473305,
+      "current": 0.46638942306517905,
+      "delta": -0.03017041140812593,
+      "metric": "pr_auc",
+      "n_baseline_matured": 1220,
+      "n_current_matured": 814,
+      "note": "",
+      "sufficient": true
+    },
+    {
+      "baseline": 0.47717842323651455,
+      "current": 0.4897959183673469,
+      "delta": 0.012617495130832379,
+      "metric": "precision",
+      "n_baseline_matured": 1220,
+      "n_current_matured": 814,
+      "note": "",
+      "sufficient": true
+    },
+    {
+      "baseline": 0.4791666666666667,
+      "current": 0.4864864864864865,
+      "delta": 0.007319819819819828,
+      "metric": "recall",
+      "n_baseline_matured": 1220,
+      "n_current_matured": 814,
+      "note": "",
+      "sufficient": true
+    },
+    {
+      "baseline": 0.12644806133360578,
+      "current": 0.12011979054064405,
+      "delta": -0.006328270792961735,
+      "metric": "brier_score",
+      "n_baseline_matured": 1220,
+      "n_current_matured": 814,
+      "note": "",
+      "sufficient": true
+    }
+  ],
+  "signals": [
+    {
+      "baseline_n": 1220,
+      "baseline_value": 0.19533050102694988,
+      "current_n": 814,
+      "current_value": 0.18388646786908353,
+      "distance": 0.011510419652013753,
+      "kind": "prediction",
+      "name": "predicted_probability",
+      "note": "",
+      "severity": "stable",
+      "statistic": "psi",
+      "sufficient": true
+    },
+    {
+      "baseline_n": 1220,
+      "baseline_value": 0.19533050102694988,
+      "current_n": 814,
+      "current_value": 0.18388646786908353,
+      "distance": 0.04202481169694283,
+      "kind": "prediction",
+      "name": "predicted_probability",
+      "note": "",
+      "severity": "stable",
+      "statistic": "ks",
+      "sufficient": true
+    },
+    {
+      "baseline_n": 1220,
+      "baseline_value": 0.2157300819672131,
+      "current_n": 814,
+      "current_value": 0.32194815724815723,
+      "distance": 0.5473967480091039,
+      "kind": "feature",
+      "name": "discount_depth",
+      "note": "",
+      "severity": "investigate",
+      "statistic": "psi",
+      "sufficient": true
+    },
+    {
+      "baseline_n": 1220,
+      "baseline_value": 0.6090163934426229,
+      "current_n": 814,
+      "current_value": 0.5921375921375921,
+      "distance": 0.0,
+      "kind": "feature",
+      "name": "is_cod",
+      "note": "",
+      "severity": "stable",
+      "statistic": "psi",
+      "sufficient": true
+    },
+    {
+      "baseline_n": 1220,
+      "baseline_value": 1011.7112295081967,
+      "current_n": 814,
+      "current_value": 797.7152948402949,
+      "distance": 0.10160600180310009,
+      "kind": "feature",
+      "name": "order_value_inr",
+      "note": "",
+      "severity": "watch",
+      "statistic": "psi",
+      "sufficient": true
+    },
+    {
+      "baseline_n": 1220,
+      "baseline_value": 0.1727609499668323,
+      "current_n": 814,
+      "current_value": 0.17532386668311634,
+      "distance": 0.008376470917278505,
+      "kind": "feature",
+      "name": "prior_rto_rate",
+      "note": "",
+      "severity": "stable",
+      "statistic": "psi",
+      "sufficient": true
+    },
+    {
+      "baseline_n": 1220,
+      "baseline_value": 0.19754098360655736,
+      "current_n": 814,
+      "current_value": 0.18058968058968058,
+      "distance": 0.01695130301687678,
+      "kind": "flag_rate",
+      "name": "flag_rate",
+      "note": "",
+      "severity": "stable",
+      "statistic": "absolute_difference",
+      "sufficient": true
+    },
+    {
+      "baseline_n": 1220,
+      "baseline_value": 0.19672131147540983,
+      "current_n": 814,
+      "current_value": 0.18181818181818182,
+      "distance": 0.01490312965722801,
+      "kind": "outcome_rate",
+      "name": "rto_rate",
+      "note": "",
+      "severity": "stable",
+      "statistic": "absolute_difference",
+      "sufficient": true
+    },
+    {
+      "baseline_n": 1220,
+      "baseline_value": 0.01192131030204063,
+      "current_n": 814,
+      "current_value": 0.02338491385044624,
+      "distance": 0.011463603548405612,
+      "kind": "calibration",
+      "name": "expected_calibration_error",
+      "note": "",
+      "severity": "stable",
+      "statistic": "absolute_difference",
+      "sufficient": true
+    }
+  ],
+  "warnings": [
+    "Measured change: pr_auc moved from 0.4966 to 0.4664 (-0.0302) on 814 matured orders. This is a labelled comparison, so it is evidence about model quality rather than a distribution shift.",
+    "2 input feature(s) moved between the windows: discount_depth (PSI 0.547), order_value_inr (PSI 0.102). Input drift is expected in a seasonal business and is not by itself a problem. It becomes one when it coincides with measured degradation or calibration movement above."
+  ]
+}

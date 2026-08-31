@@ -70,15 +70,35 @@ What works today:
   audit trail, and a real tool-use loop — which refuses rather than fabricates
   when the language layer is unavailable
 - **A merchant console** (React + TypeScript): dashboard, server-filtered order
-  queue, per-order investigation, economic simulator, and an evaluation screen
-  that keeps validation and sealed-test figures in separate columns. It computes
-  nothing — every displayed value is a backend response, and an unavailable
-  value renders as an em-dash rather than a zero
+  queue, per-order investigation, economic simulator, an evaluation screen that
+  keeps validation and sealed-test figures in separate columns, and a fairness
+  and drift screen. It computes nothing — every displayed value is a backend
+  response, and an unavailable value renders as an em-dash rather than a zero
+- **A cohort fairness audit** over operational cohorts only, with Wilson
+  intervals and an explicit minimum support; sensitive attributes are neither
+  recorded nor inferred, and a cohort naming one is refused rather than computed
+- **A controlled distribution-shift study**: nine named perturbations of the
+  generator, the model frozen and unretrained, compared on PR-AUC lift because
+  raw PR-AUC is not comparable across environments with different base rates
+- **Drift monitoring** that keeps "the distribution moved" structurally separate
+  from "the model got worse", and says the second is unanswerable when the
+  current window has no matured outcomes
 - **Generated reports**: [ladder results](docs/ladder_results.md),
   [model card](docs/model_card.md), [economics](docs/economics.md)
 
-**Not built:** the outcome loop and the cohort fairness audit — so **no fairness
-claim should be made** about this model.
+**Not built:** the outcome loop and live drift monitoring against production
+traffic.
+
+**On fairness:** the audit runs and its results are in
+[docs/responsible_ai.md](docs/responsible_ai.md). It examines operational
+cohorts on synthetic data, which is **not evidence of production fairness** and
+must not be quoted as such.
+
+**This is not production-ready.** The API has no authentication and no rate
+limiting; no real LLM round trip is covered by any test; and scoring one order
+takes ~3 seconds because the feature context is rebuilt per request. Those and
+the rest are enumerated in
+[docs/phase11_report.md § Known limitations](docs/phase11_report.md#7-known-limitations-and-unresolved-issues).
 
 Full breakdown: [ARCHITECTURE.md § Implementation status](ARCHITECTURE.md#8-implementation-status).
 
@@ -549,6 +569,8 @@ a key must be present.
 | [docs/model_card.md](docs/model_card.md) | **The final model's card.** Intended use, limitations, fairness, drift, and every measured number |
 | [docs/agents.md](docs/agents.md) | **The agent layer.** Tools, permission boundaries, grounding, audit, and what it refuses to do |
 | [docs/economics.md](docs/economics.md) | **The economic evaluation.** Threshold derivation, the friction ladder, expected and realized rupees, sensitivity, and where every number came from |
+| [docs/phase11_report.md](docs/phase11_report.md) | **The integration and hardening report.** Defects found and fixed, failure behaviour, security audit, measured latency, and every unresolved issue |
+| [docs/responsible_ai.md](docs/responsible_ai.md) | **The responsible-AI and robustness report.** Cohort fairness, distribution shift, drift monitoring, and what none of it proves. Generated, never hand-written |
 | [docs/console.md](docs/console.md) | **The merchant console.** The five screens, the four rules it holds, and what it deliberately does not build |
 | [docs/api.md](docs/api.md) | **The API reference.** The inference chain, every endpoint, real request/response examples, and what the API refuses to do |
 | [REPORT.md](REPORT.md) | Final report — written once the system is complete |

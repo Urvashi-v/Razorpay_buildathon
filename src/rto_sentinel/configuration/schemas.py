@@ -571,9 +571,26 @@ class CalibrationMetricConfig(_Frozen):
 
 
 class FairnessConfig(_Frozen):
+    """Which cohorts the audit examines, and what counts as evidence.
+
+    ``group_by`` may only name operational cohorts. That is enforced in
+    ``eval/fairness.py`` rather than here, because the check is a substring match
+    against a token list that belongs next to the audit it protects - but the
+    consequence is worth stating at the config surface: adding a sensitive
+    attribute to this list makes the audit fail, not quietly widen.
+    """
+
     group_by: list[str]
     report: list[str]
     disparity_review_trigger: dict[str, float]
+
+    #: Orders a group needs before its rates count as evidence. Below this the
+    #: Wilson interval on a proportion is wider than the disparities the audit is
+    #: looking for, so any comparison is decided by noise.
+    min_support_orders: int = Field(default=100, ge=1)
+
+    #: Flagged orders a group needs before its precision counts as evidence.
+    min_flagged_orders: int = Field(default=30, ge=1)
 
 
 class EvaluationConfig(_Frozen):

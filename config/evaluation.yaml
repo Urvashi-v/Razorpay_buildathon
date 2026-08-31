@@ -51,7 +51,18 @@ cohorts:
 fairness:
   # SPEC section 07: a model that concentrates its flags on tier-3 pincodes has
   # not found fraud, it has found poverty and bad municipal addressing.
-  group_by: [pincode_tier, order_value_band]
+  #
+  # EVERY COHORT HERE IS OPERATIONAL, AND THAT IS NOT NEGOTIABLE.
+  # No sensitive characteristic is recorded by the generator, and none may be
+  # inferred. `eval/fairness.py` refuses by name any cohort matching a sensitive
+  # token - gender, religion, caste, ethnicity, age, income and the rest - and
+  # the refusal is a hard error, not a skipped cohort. An audit that silently
+  # examined less than this file claims would report a cleaner result than it
+  # measured.
+  #
+  # Pincode tier is the closest thing here to a proxy for something sensitive,
+  # which is exactly why it leads the list rather than being omitted.
+  group_by: [pincode_tier, order_value_band, customer_history_band, payment_method]
   report: [flag_rate, precision, recall, net_inr_per_1000]
   # If a tier is flagged materially more often AND with materially worse
   # precision, the model is transferring cost onto that group without
@@ -60,6 +71,14 @@ fairness:
   disparity_review_trigger:
     flag_rate_ratio_above: 1.5
     precision_drop_below: 0.10
+  # Below these, a group is shown in the table but takes no part in the
+  # comparison in either direction - it can neither fire the trigger nor hold
+  # down a ratio that would otherwise have fired it. Suppressing thin groups
+  # entirely would hide exactly what an audit exists to look at.
+  min_support_orders: 100
+  # Precision's denominator is the flag count, not the group size, so a large
+  # group that is barely flagged still yields a precision nobody should read.
+  min_flagged_orders: 30
 
 ablation:
   mode: leave_one_family_out

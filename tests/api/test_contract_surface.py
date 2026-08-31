@@ -43,9 +43,11 @@ EXPECTED_PATHS = {
     "/v1/evaluation/selection",
     "/v1/evaluation/reliability",
     "/v1/evaluation/fairness",
+    "/v1/evaluation/shift",
     "/v1/monitoring/model",
     "/v1/monitoring/decisions",
     "/v1/monitoring/data",
+    "/v1/monitoring/drift",
     "/v1/explanations/{order_id}",
     "/v1/explanations/{order_id}/investigate",
     "/v1/explanations/{order_id}/confirmation",
@@ -81,20 +83,31 @@ def test_openapi_states_the_data_provenance(client: TestClient) -> None:
     assert "not a claim about production performance" in description
 
 
-def test_unimplemented_endpoints_return_an_explicit_501(client: TestClient) -> None:
+@pytest.mark.parametrize(
+    "path",
+    ["/v1/evaluation/fairness", "/v1/evaluation/shift", "/v1/monitoring/drift"],
+)
+def test_endpoints_with_no_artefact_return_an_explicit_501(client: TestClient, path: str) -> None:
     """No plausible-looking placeholder data anywhere in the API.
 
-    The endpoints this test guards have moved as each phase landed: economics in
-    Phase 6, the decision queue in Phase 7. What remains is the language layer -
-    and the fairness audit, which returns 501 because it has genuinely never been
-    run and a fabricated breakdown would be the most damaging fake in this API.
+    These three are implemented, and each serves a saved artefact. This client
+    points at an empty artefact root, so none of the experiments has been run -
+    and the correct answer is 501 with the reason, not an empty table that reads
+    as "we checked and found nothing".
+
+    The fairness case is the one that matters most: a fairness report nobody
+    computed, presented as evidence the model was audited, would be the most
+    damaging fake this API could serve.
     """
-    response = client.get("/v1/evaluation/fairness")
+    response = client.get(path)
 
     assert response.status_code == 501
     error = response.json()["error"]
     assert error["code"] == "NOT_IMPLEMENTED"
-    assert "has not been run" in error["message"]
+    # The message must say the experiment was not run AND name the command that
+    # runs it. A 501 that leaves the caller guessing is only half an answer.
+    assert "been run" in error["message"]
+    assert "rto-sentinel" in error["message"]
 
 
 def test_the_implemented_economics_endpoints_return_real_arithmetic(

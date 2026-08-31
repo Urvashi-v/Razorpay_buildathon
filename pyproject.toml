@@ -30,18 +30,25 @@ dependencies = [
   "pandas>=2.2,<3",
   "scikit-learn>=1.4,<2",
   "lightgbm>=4.3,<5",
-  "shap>=0.45,<1",
   # Evaluation plots: PR curves, reliability diagrams, threshold sweeps. Written
   # to artifacts/reports/ as PNGs rather than shown, so the harness stays usable
   # without a display.
   "matplotlib>=3.8,<4",
+  # Neither scipy nor pyarrow is imported by this package directly. Both are
+  # required at runtime anyway - scikit-learn imports scipy, and pandas needs a
+  # parquet engine - and they are pinned explicitly so an upstream dropping them
+  # is a resolver error rather than an ImportError on the first `to_parquet`.
+  #
+  # `shap` and `structlog` used to sit alongside them and were removed in Phase
+  # 11: an AST walk over `src/` found neither imported anywhere. Feature
+  # attributions come from LightGBM's own `pred_contrib=True`
+  # (`models/rung4_lightgbm.py`), never from the shap package, and nothing was
+  # ever wired to structured logging.
   "scipy>=1.12,<2",
   # Parquet is the dataset artefact format. A CSV round-trip loses exactly the
   # two dtypes that matter here: timezone-aware timestamps, and the difference
   # between a NULL label and the string "None".
   "pyarrow>=16.0,<24",
-  # --- observability ---
-  "structlog>=24.1,<26",
 ]
 
 [project.optional-dependencies]
@@ -150,10 +157,8 @@ module = [
     "anthropic.*",
     "joblib.*",
     "lightgbm.*",
-    "shap.*",
     "sklearn.*",
     "scipy.*",
-    "structlog.*",
 ]
 ignore_missing_imports = true
 

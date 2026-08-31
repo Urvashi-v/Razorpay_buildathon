@@ -10,10 +10,19 @@ the test is named. Where something is not built yet, it says so.
 **Status: the end-to-end path is built and running.** Data layer, feature
 pipeline, calibrated model, deterministic decision engine, FastAPI backend, agent
 layer and merchant console are implemented and tested. What remains unbuilt is
-named explicitly: the cohort fairness audit (so **no fairness claim should be
-made** about this model), the outcome loop, drift monitoring, and address repair
-— which is deferred with reasons rather than faked. See
+named explicitly: the outcome loop, live drift monitoring against production
+traffic, and address repair — which is deferred with reasons rather than faked.
+The cohort fairness audit and the robustness study now run; their results are in
+`docs/responsible_ai.md`, and they are **controlled benchmark experiments on
+synthetic data, not evidence of production fairness or robustness**. See
 [Implementation status](#8-implementation-status).
+
+**It is not production-ready, and the reasons are specific rather than
+rhetorical.** The API has no authentication and no rate limiting; no test in this
+repository executes a real LLM call; scoring one order takes ~3 seconds because
+the feature context is rebuilt from thousands of history rows per request; and
+the integration suite runs on SQLite. All of it is enumerated in
+[docs/phase11_report.md](docs/phase11_report.md).
 
 ---
 
@@ -429,6 +438,22 @@ Unimplemented endpoints return **501 `NOT_IMPLEMENTED`**, never plausible
 placeholder data. A fabricated score would flow into a chart, a screenshot, and
 then a claim.
 
+### 3.10b Monitoring (`monitoring/`)
+
+Drift measurement, kept deliberately thin and label-aware.
+
+**Drift is not failure, and the types make it impossible to claim otherwise.** A
+`DriftSignal` carries a distance and a severity band and has no field in which to
+record a verdict. A `PerformanceDelta` records a measured change in quality and
+can only be constructed where mature labels exist. When the current window has
+not matured, the report says the question is unanswered rather than showing an
+all-clear — which is the single most misleading thing a monitoring page could do.
+
+The severities are `stable` / `watch` / `investigate`, not `pass` / `warn` /
+`fail`. Indian e-commerce moves hard during festive season; COD share, order
+values and category mix all shift for entirely ordinary reasons, and a monitor
+that pages someone every Diwali gets muted by March.
+
 ### 3.11 Console (`console/`)
 
 React + TypeScript + Vite. **Reads every number from the backend and computes
@@ -464,8 +489,9 @@ Full detail: [docs/console.md](docs/console.md).
 | `decision/` imports no LLM SDK and no `agents/` | `test_decision_layer_never_imports_an_llm` |
 | `decision/` imports no database, web framework or HTTP client | `test_decision_layer_is_free_of_io` |
 | `agents/` imports no `decision/`, `models/`, `features/`, `data/`, `eval/` or ML library | `test_agents_cannot_reach_the_decision_engine_or_models` |
+| `agents/` reaches `serving/` only through `agent_tools`, the read-only tool registry | `test_agents_reach_serving_only_through_the_tool_registry` |
 | Route handlers import no ML library | `test_no_ml_logic_in_route_handlers` |
-| `data/`, `features/`, `models/`, `eval/` import no `api/` or `db/` | `test_ml_layers_do_not_import_the_web_or_database_layer` |
+| `data/`, `features/`, `models/`, `eval/`, `monitoring/` import no `api/` or `db/` | `test_ml_layers_do_not_import_the_web_or_database_layer` |
 | `contracts/` imports nothing above itself | `test_contracts_depend_on_nothing_but_contracts` |
 | Only `settings.py` reads `os.environ` | `test_only_settings_reads_the_environment` |
 
@@ -605,8 +631,12 @@ reviewer to verify that in a minute.
 | End-to-end integration test (database → model → decision) | **Implemented and passing** |
 | Console: dashboard, order queue, investigation, simulator, evaluation | **Implemented and tested** |
 | Console: every displayed value sourced from a backend response | **Implemented and tested** (`OrderInvestigation.test.tsx` asserts the request URL and the rendered response) |
-| Console: fairness screen | Blocked on the audit below — a screen with no audit behind it would have nothing true to show |
-| Fairness audit by cohort | Contract fixed — **not run**, endpoint returns 501 |
+| Console: fairness and drift screen | **Implemented and tested** |
+| Integration and failure-behaviour suite (Phase 11) | **Implemented and passing** — see `docs/phase11_report.md` |
+| Frontend/backend path contract test | **Implemented and passing**; response *shapes* still unverified |
+| API authentication and rate limiting | **Not implemented.** The API is open to anyone who can reach the port |
+| Real LLM round trip | **Never executed.** The transport is the one leg no test covers |
+| Fairness, shift and drift endpoints | **Implemented and tested**; each returns 501 with its reason until its experiment is run |
 | Agent tool contract, schemas and permission boundaries | **Implemented and tested** |
 | Read-only application toolset (6 tools) | **Implemented and tested** |
 | Grounding validators (4) | **Implemented and tested** |
@@ -615,8 +645,13 @@ reviewer to verify that in a minute.
 | Risk investigation agent (tool loop) | **Implemented; unverified against the live API** |
 | Confirmation writer, digest writer | **Implemented; unverified against the live API** |
 | Address repair | **Deferred, with reasons** (`agents/address_repair.py`) |
-| Cohort/fairness audit execution | **Not run.** No fairness claim may be made until it is |
-| Drift monitoring, outcome loop | Interfaces fixed — **not implemented** |
+| Cohort fairness audit, Wilson intervals, support gating | **Implemented, tested and run** — results in `docs/responsible_ai.md` |
+| Sensitive-attribute refusal (hard error, not a skipped cohort) | **Implemented and tested** |
+| Controlled distribution-shift study (9 perturbations, frozen model) | **Implemented, tested and run** |
+| Drift monitoring: feature, prediction, rate and calibration | **Implemented, tested and run** |
+| Responsible-AI report, generated from artefacts | **Implemented and generated** |
+| Outcome loop (feeding realised outcomes back into training) | **Not implemented** |
+| Live drift monitoring against production traffic | **Not implemented** — the drift module compares two windows of a stored book; wiring it to live traffic is deployment work |
 
 Unimplemented functions raise `NotImplementedError` with the phase named. They do
 not return placeholder values.

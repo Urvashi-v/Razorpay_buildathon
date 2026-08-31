@@ -472,3 +472,166 @@ export interface ToolCatalogueEntry {
   permission: string;
   input_schema: Record<string, unknown>;
 }
+
+// --- responsible AI: cohorts, distribution shift, drift ----------------------
+
+/**
+ * One slice of the cohort audit.
+ *
+ * `sufficient` is the field that matters most. A group below the minimum support
+ * is shown - suppressing thin groups would hide exactly what a fairness audit
+ * exists to look at - but it is an observation, not evidence, and the console
+ * must render it visibly differently.
+ */
+export interface CohortResult {
+  cohort: string;
+  group: string;
+  n_orders: number;
+  flag_rate: number;
+  precision: number | null;
+  recall: number | null;
+  net_inr_per_1000: number | null;
+  rto_rate: number | null;
+  n_positives: number;
+  n_flagged: number;
+  flag_rate_ci: [number, number] | null;
+  precision_ci: [number, number] | null;
+  rto_rate_ci: [number, number] | null;
+  sufficient: boolean;
+  insufficient_reason: string;
+}
+
+export interface FairnessAudit {
+  slices: CohortResult[];
+  max_flag_rate_ratio: number;
+  worst_precision_drop: number;
+  triggered: boolean;
+  narrative: string;
+  cohorts_examined: string[];
+  groups_below_support: string[];
+  min_support: number;
+  most_flagged_group: string;
+  least_flagged_group: string;
+}
+
+export interface FairnessResponse {
+  generated_at: string;
+  dataset_run_id: string;
+  split: string;
+  model_version: string;
+  threshold: number;
+  disclaimer: string;
+  audit: FairnessAudit;
+  slices: CohortResult[];
+}
+
+export interface EnvironmentSpec {
+  name: string;
+  description: string;
+  overrides: Record<string, number>;
+  seed: number;
+  n_orders: number;
+}
+
+export interface ShiftResult {
+  environment: string;
+  description: string;
+  n_orders: number;
+  observed_rto_rate: number;
+  pr_auc: number;
+  /**
+   * PR-AUC divided by the base rate.
+   *
+   * Read this, not `pr_auc`, when comparing environments. A random ranker scores
+   * PR-AUC equal to the positive rate, so an environment whose base rate moved
+   * has a different floor - and raw PR-AUC rises when the world gets riskier.
+   */
+  pr_auc_lift: number;
+  roc_auc: number;
+  brier_score: number;
+  expected_calibration_error: number;
+  threshold: number;
+  flag_rate: number;
+  precision: number | null;
+  recall: number | null;
+  net_inr_per_1000: number;
+  pr_auc_delta: number | null;
+  pr_auc_lift_delta: number | null;
+  net_delta: number | null;
+  ece_delta: number | null;
+}
+
+export interface ShiftStudy {
+  generated_at: string;
+  model_version: string;
+  feature_version: string;
+  generator_version: string;
+  threshold: number;
+  environments: EnvironmentSpec[];
+  results: ShiftResult[];
+  findings: string[];
+  data_provenance: string;
+}
+
+export type DriftSeverity = 'stable' | 'watch' | 'investigate';
+
+export type DriftKind =
+  | 'feature'
+  | 'prediction'
+  | 'outcome_rate'
+  | 'flag_rate'
+  | 'calibration';
+
+export interface WindowSummary {
+  label: string;
+  n_orders: number;
+  start: string | null;
+  end: string | null;
+  n_matured: number;
+}
+
+/** A distance between two windows. Deliberately carries no verdict. */
+export interface DriftSignal {
+  name: string;
+  kind: DriftKind;
+  statistic: string;
+  distance: number;
+  severity: DriftSeverity;
+  baseline_value: number | null;
+  current_value: number | null;
+  baseline_n: number;
+  current_n: number;
+  sufficient: boolean;
+  note: string;
+}
+
+/** A measured change in model quality. Only exists where labels do. */
+export interface PerformanceDelta {
+  metric: string;
+  baseline: number;
+  current: number;
+  delta: number;
+  n_baseline_matured: number;
+  n_current_matured: number;
+  sufficient: boolean;
+  note: string;
+}
+
+export interface DriftReport {
+  generated_at: string;
+  baseline: WindowSummary;
+  current: WindowSummary;
+  signals: DriftSignal[];
+  performance: PerformanceDelta[];
+  warnings: string[];
+  model_version: string;
+  feature_version: string;
+  /**
+   * False when no labelled comparison was possible.
+   *
+   * The console must surface this prominently: an all-stable signal table
+   * computed with no labels is the most misleading thing this system can show.
+   */
+  labels_available: boolean;
+  data_provenance: string;
+}

@@ -30,7 +30,11 @@ An ops associate relaxing a SEVERE band is asserting something the model did not
 know. Aggregated, overrides are a signal about where the model is systematically
 wrong - and where the override was mistaken, the outcome says so.
 
-STATUS: Phase 6.
+STATUS: NOT IMPLEMENTED.
+
+The control-holdout flag is set on real decisions and the policy reserves the
+slice, so the data needed for this would accumulate in production. The
+measurement itself does not exist.
 """
 
 from __future__ import annotations
@@ -59,7 +63,11 @@ class InterventionEffectiveness:
 
 def intervention_effectiveness(band: str) -> InterventionEffectiveness:
     """Compare treated versus control outcomes for one friction band."""
-    raise NotImplementedError("Intervention measurement lands in Phase 6.")
+    raise NotImplementedError(
+        "Intervention effectiveness has never been measured. The rate used by the "
+        "decision engine is a stated ASSUMPTION - see contracts/provenance.py - and "
+        "this function exists to mark where the measurement would go."
+    )
 
 
 def override_summary(merchant_id: str) -> dict[str, int]:
@@ -69,4 +77,8 @@ def override_summary(merchant_id: str) -> dict[str, int]:
     and this is how that becomes visible rather than remaining folklore in the
     operations team.
     """
-    raise NotImplementedError("Override analytics land in Phase 6.")
+    raise NotImplementedError(
+        "Override analytics are not implemented. Overrides are logged, and "
+        "GET /v1/monitoring/decisions reports their counts by direction; the "
+        "analysis of what they imply is not built."
+    )

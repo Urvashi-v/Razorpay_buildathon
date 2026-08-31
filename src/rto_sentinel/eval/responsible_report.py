@@ -193,6 +193,24 @@ def write_drift_artifacts(
     return (path,)
 
 
+#: Keys written into the artefact files for a human opening them directly, which
+#: are not part of the contract the API serves.
+#:
+#: The contracts are ``extra="forbid"``, so these must be removed before
+#: validation. One list, used by every reader - the alternative is each call site
+#: remembering, and the one that forgets returns a 500 from a file that is
+#: perfectly well-formed.
+ANNOTATION_KEYS = ("disclaimer", "dataset_run_id")
+
+
+def read_contract_payload(path: Path) -> dict[str, object]:
+    """Load an artefact and strip the human-facing annotations."""
+    payload: dict[str, object] = json.loads(path.read_text(encoding="utf-8"))
+    for key in ANNOTATION_KEYS:
+        payload.pop(key, None)
+    return payload
+
+
 def _round(value: float | None, digits: int = 4) -> str | float:
     """Blank for a missing value, never a zero.
 
@@ -224,14 +242,11 @@ def load_artifacts(artifact_root: Path) -> dict[str, object]:
 
     shift_path = directory / "shift_study.json"
     if shift_path.is_file():
-        found["shift"] = ShiftStudy.model_validate_json(shift_path.read_text(encoding="utf-8"))
+        found["shift"] = ShiftStudy.model_validate(read_contract_payload(shift_path))
 
     drift_path = directory / "drift_report.json"
     if drift_path.is_file():
-        payload = json.loads(drift_path.read_text(encoding="utf-8"))
-        payload.pop("dataset_run_id", None)
-        payload.pop("disclaimer", None)
-        found["drift"] = DriftReport.model_validate(payload)
+        found["drift"] = DriftReport.model_validate(read_contract_payload(drift_path))
 
     return found
 
@@ -389,6 +404,16 @@ def _shift_section(found: dict[str, object]) -> list[str]:
     )
     lines.append("")
     lines.append(
+        "The `reference` environment is itself a fresh draw from the *unshifted* "
+        "distribution, generated the same way as every other environment and differing "
+        "only in that it applies no overrides. That is what makes the deltas meaningful: "
+        "sampling variance is present in the reference too, so subtracting it leaves the "
+        "effect of the perturbation rather than the effect of having generated new data. "
+        "A study that compared shifted worlds against the original training run would be "
+        "measuring both at once."
+    )
+    lines.append("")
+    lines.append(
         f"The model (`{study.model_version}`) is **not retrained** between environments, "
         f"and the threshold is held fixed at {study.threshold:.4f}. Re-deriving the "
         "threshold per environment would repair part of the damage and understate what a "
@@ -412,15 +437,25 @@ def _shift_section(found: dict[str, object]) -> list[str]:
     lines.append("### Measured degradation")
     lines.append("")
     lines.append(
-        "| Environment | n | RTO rate | PR-AUC | ΔPR-AUC | ECE | ΔECE | Flag rate | "
-        "Precision | Net ₹/1k | ΔNet |"
+        "**Read the lift column, not the raw PR-AUC column.** A random ranker scores "
+        "PR-AUC equal to the positive rate, so an environment whose base rate moved "
+        "hands the model a different floor for free. In `rto_base_rate_up` the raw "
+        "PR-AUC rises, and reading that as robustness would be reporting the arithmetic "
+        "of the base rate as a property of the model. Lift divides the floor out."
     )
-    lines.append("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
+    lines.append("")
+    lines.append(
+        "| Environment | n | RTO rate | PR-AUC | Lift | ΔLift | ECE | ΔECE | "
+        "Flag rate | Precision | Net ₹/1k | ΔNet |"
+    )
+    lines.append("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
     for result in study.results:
         lines.append(
             f"| `{result.environment}` | {result.n_orders:,} | "
             f"{_pct(result.observed_rto_rate)} | {result.pr_auc:.3f} | "
-            f"{_delta(result.pr_auc_delta)} | {result.expected_calibration_error:.3f} | "
+            f"{result.pr_auc_lift:.2f}x | "
+            f"{'—' if result.pr_auc_lift_delta is None else f'{result.pr_auc_lift_delta:+.2f}x'} | "
+            f"{result.expected_calibration_error:.3f} | "
             f"{_delta(result.ece_delta)} | {_pct(result.flag_rate)} | "
             f"{_num(result.precision)} | {_inr(result.net_inr_per_1000)} | "
             f"{_delta(result.net_delta, money=True)} |"

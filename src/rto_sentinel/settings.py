@@ -152,7 +152,35 @@ class Settings(BaseSettings):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def cors_origins(self) -> list[str]:
-        return [origin.strip() for origin in self.cors_origins_raw.split(",") if origin.strip()]
+        """Allowed browser origins. A wildcard is refused, not silently accepted.
+
+        The API sends ``Access-Control-Allow-Credentials: true``. Combined with a
+        wildcard origin that is the classic CORS hole: Starlette cannot legally
+        return ``*`` alongside credentials, so it echoes back whatever ``Origin``
+        the request carried. The practical effect is that *any* site can make
+        credentialed cross-origin requests and read the responses - the opposite
+        of what someone setting ``*`` usually believes they are configuring.
+
+        Verified rather than assumed: with ``RTO_CORS_ORIGINS=*`` the response to
+        a request from ``https://evil.example.com`` came back with that exact
+        origin echoed and credentials allowed.
+
+        Refusing at startup is deliberate. Quietly dropping the wildcard would
+        leave an operator believing a config that is not in force, and quietly
+        dropping ``allow_credentials`` would change the API's semantics based on
+        an unrelated variable.
+        """
+        origins = [origin.strip() for origin in self.cors_origins_raw.split(",") if origin.strip()]
+        if any(origin == "*" for origin in origins):
+            msg = (
+                "RTO_CORS_ORIGINS contains '*'. This API allows credentials, and a "
+                "wildcard origin with credentials makes every site a permitted origin - "
+                "Starlette echoes the caller's own Origin header back. List the origins "
+                "explicitly, comma-separated (e.g. "
+                "'http://localhost:5173,https://console.example.com')."
+            )
+            raise ValueError(msg)
+        return origins
 
     def resolve(self, path: Path) -> Path:
         """Resolve a possibly-relative configured path against the repo root."""

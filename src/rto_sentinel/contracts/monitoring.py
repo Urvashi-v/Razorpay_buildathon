@@ -203,8 +203,21 @@ class ShiftResult(BaseModel):
     recall: float | None = Field(default=None, ge=0.0, le=1.0)
     net_inr_per_1000: float
 
+    #: PR-AUC divided by the base rate: how many times better than chance the
+    #: ranking is.
+    #:
+    #: Raw PR-AUC is NOT comparable across these environments and reporting it as
+    #: though it were would invert several conclusions. A random ranker scores
+    #: PR-AUC equal to the positive rate, so an environment where the RTO rate
+    #: rises from 17% to 23% hands the model a higher floor for free - its raw
+    #: PR-AUC goes *up* while its actual discriminative power is unchanged or
+    #: worse. Lift divides that floor out, and is what the findings are computed
+    #: from.
+    pr_auc_lift: float = Field(default=0.0, ge=0.0)
+
     #: Difference from the reference environment. None on the reference itself.
     pr_auc_delta: float | None = None
+    pr_auc_lift_delta: float | None = None
     net_delta: float | None = None
     ece_delta: float | None = None
 

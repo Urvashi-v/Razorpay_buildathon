@@ -1,0 +1,322 @@
+{
+  "data_provenance": "Controlled benchmark experiment. Each environment is a documented parameter change to the synthetic generator, not an observation of real distribution shift. Degradation measured here describes this simulator.",
+  "disclaimer": "Controlled benchmark experiment on synthetic data. Cohorts, shifts and drift windows are properties of the documented simulator in docs/simulator.md, not observations of real customers, real distribution shift, or real production behaviour. These results are evidence that the audit machinery works and that this model behaves a certain way on this benchmark. They are NOT evidence of production fairness or production robustness, and no such claim should be made from them.",
+  "environments": [
+    {
+      "description": "the unshifted world, generated with the configured parameters",
+      "n_orders": 9000,
+      "name": "reference",
+      "overrides": {},
+      "seed": 7
+    },
+    {
+      "description": "COD share rises from 62% to 80%, as in a festive-season shift",
+      "n_orders": 9000,
+      "name": "cod_surge",
+      "overrides": {
+        "payment.cod_share": 0.8
+      },
+      "seed": 8
+    },
+    {
+      "description": "COD share falls to 35% as prepaid adoption accelerates",
+      "n_orders": 9000,
+      "name": "cod_collapse",
+      "overrides": {
+        "payment.cod_share": 0.35
+      },
+      "seed": 9
+    },
+    {
+      "description": "the COD RTO base rate rises from 26% to 38%",
+      "n_orders": 9000,
+      "name": "rto_base_rate_up",
+      "overrides": {
+        "base_rates.rto_given_cod": 0.38
+      },
+      "seed": 10
+    },
+    {
+      "description": "the COD RTO base rate falls from 26% to 15%",
+      "n_orders": 9000,
+      "name": "rto_base_rate_down",
+      "overrides": {
+        "base_rates.rto_given_cod": 0.15
+      },
+      "seed": 11
+    },
+    {
+      "description": "the catalogue swings towards fashion, the highest-return category",
+      "n_orders": 9000,
+      "name": "category_mix_fashion",
+      "overrides": {
+        "catalogue.categories.accessories.share": 0.08,
+        "catalogue.categories.beauty.share": 0.12,
+        "catalogue.categories.electronics.share": 0.08,
+        "catalogue.categories.fashion.share": 0.6,
+        "catalogue.categories.home.share": 0.12
+      },
+      "seed": 12
+    },
+    {
+      "description": "the book fills with first-time customers, so history features go null",
+      "n_orders": 9000,
+      "name": "customer_mix_new",
+      "overrides": {
+        "customers.orders_per_customer_alpha": 4.5
+      },
+      "seed": 13
+    },
+    {
+      "description": "delivery mix shifts towards tier-3 pincodes",
+      "n_orders": 9000,
+      "name": "geography_tier3",
+      "overrides": {
+        "geography.tier_shares.tier_1": 0.2,
+        "geography.tier_shares.tier_2": 0.3,
+        "geography.tier_shares.tier_3": 0.5
+      },
+      "seed": 14
+    },
+    {
+      "description": "basket sizes rise; the median order value roughly doubles",
+      "n_orders": 9000,
+      "name": "order_value_up",
+      "overrides": {
+        "catalogue.order_value.mu": 7.55
+      },
+      "seed": 15
+    },
+    {
+      "description": "COD share, RTO base rate and fashion share all rise together, as they plausibly would during a festive peak",
+      "n_orders": 9000,
+      "name": "combined_festive",
+      "overrides": {
+        "base_rates.rto_given_cod": 0.34,
+        "catalogue.categories.accessories.share": 0.1,
+        "catalogue.categories.beauty.share": 0.16,
+        "catalogue.categories.electronics.share": 0.1,
+        "catalogue.categories.fashion.share": 0.48,
+        "catalogue.categories.home.share": 0.16,
+        "payment.cod_share": 0.78
+      },
+      "seed": 16
+    }
+  ],
+  "feature_version": "1.0.0",
+  "findings": [
+    "Reference: PR-AUC 0.430 at a base rate of 16.7%, which is a lift of 2.57x over chance. Comparisons below use lift, because raw PR-AUC is not comparable across environments whose base rates differ - a random ranker scores PR-AUC equal to the positive rate.",
+    "combined_festive: ranking lift fell by 0.50x to 2.07x (raw PR-AUC 0.551 at a 26.7% base rate). The model ranks orders less well when cod share, rto base rate and fashion share all rise together, as they plausibly would during a festive peak",
+    "cod_surge: ranking lift fell by 0.40x to 2.17x (raw PR-AUC 0.465 at a 21.4% base rate). The model ranks orders less well when cod share rises from 62% to 80%, as in a festive-season shift",
+    "rto_base_rate_up: ranking lift fell by 0.20x to 2.37x (raw PR-AUC 0.560 at a 23.7% base rate). The model ranks orders less well when the cod rto base rate rises from 26% to 38%",
+    "rto_base_rate_down: calibration error rose by 0.058 to 0.083. This is the more serious failure mode: the threshold is compared against a probability, so a miscalibrated score makes every rupee figure downstream wrong even where ranking held up.",
+    "rto_base_rate_down: net economics turned non-positive (INR -2,130 per 1,000 orders). Under this shift the system stops paying for itself at the frozen threshold.",
+    "4 of 9 shifted environments left ranking lift within 0.15x of the reference: category_mix_fashion, customer_mix_new, geography_tier3, order_value_up."
+  ],
+  "generated_at": "2026-08-31T13:09:23.926967Z",
+  "generator_version": "1.0.0",
+  "model_version": "a0d780424b79",
+  "results": [
+    {
+      "brier_score": 0.11697500289384066,
+      "description": "the unshifted world, generated with the configured parameters",
+      "ece_delta": null,
+      "environment": "reference",
+      "expected_calibration_error": 0.02514172511820277,
+      "flag_rate": 0.1806981519507187,
+      "n_orders": 8766,
+      "net_delta": null,
+      "net_inr_per_1000": 2276.1806981519508,
+      "observed_rto_rate": 0.1674652064795802,
+      "pr_auc": 0.4297839354489674,
+      "pr_auc_delta": null,
+      "pr_auc_lift": 2.5664073420610687,
+      "pr_auc_lift_delta": null,
+      "precision": 0.41035353535353536,
+      "recall": 0.4427792915531335,
+      "roc_auc": 0.7965030731423562,
+      "threshold": 0.34814814814814815
+    },
+    {
+      "brier_score": 0.1438683363261637,
+      "description": "COD share rises from 62% to 80%, as in a festive-season shift",
+      "ece_delta": 0.008642587640617462,
+      "environment": "cod_surge",
+      "expected_calibration_error": 0.03378431275882023,
+      "flag_rate": 0.24766567979959006,
+      "n_orders": 8782,
+      "net_delta": 1846.1718411329498,
+      "net_inr_per_1000": 4122.352539284901,
+      "observed_rto_rate": 0.21407424276930084,
+      "pr_auc": 0.46472161770399145,
+      "pr_auc_delta": 0.03493768225502403,
+      "pr_auc_lift": 2.1708432163172624,
+      "pr_auc_lift_delta": -0.3955641257438063,
+      "precision": 0.4303448275862069,
+      "recall": 0.4978723404255319,
+      "roc_auc": 0.7602460279783226,
+      "threshold": 0.34814814814814815
+    },
+    {
+      "brier_score": 0.07192603676583624,
+      "description": "COD share falls to 35% as prepaid adoption accelerates",
+      "ece_delta": -0.01175904534284588,
+      "environment": "cod_collapse",
+      "expected_calibration_error": 0.013382679775356891,
+      "flag_rate": 0.08506530380465645,
+      "n_orders": 8805,
+      "net_delta": -568.8553148470103,
+      "net_inr_per_1000": 1707.3253833049405,
+      "observed_rto_rate": 0.10164679159568427,
+      "pr_auc": 0.4317053965775342,
+      "pr_auc_delta": 0.0019214611285667815,
+      "pr_auc_lift": 4.2471128680057975,
+      "pr_auc_lift_delta": 1.6807055259447288,
+      "precision": 0.4472630173564753,
+      "recall": 0.3743016759776536,
+      "roc_auc": 0.8572150378913616,
+      "threshold": 0.34814814814814815
+    },
+    {
+      "brier_score": 0.13818739505737032,
+      "description": "the COD RTO base rate rises from 26% to 38%",
+      "ece_delta": 0.013091053053850096,
+      "environment": "rto_base_rate_up",
+      "expected_calibration_error": 0.03823277817205287,
+      "flag_rate": 0.21592334892209422,
+      "n_orders": 8767,
+      "net_delta": 6453.829567617411,
+      "net_inr_per_1000": 8730.010265769362,
+      "observed_rto_rate": 0.23668301585491047,
+      "pr_auc": 0.5601110754143814,
+      "pr_auc_delta": 0.130327139965414,
+      "pr_auc_lift": 2.3665030352568106,
+      "pr_auc_lift_delta": -0.19990430680425808,
+      "precision": 0.5478077126254622,
+      "recall": 0.49975903614457834,
+      "roc_auc": 0.8250153032932688,
+      "threshold": 0.34814814814814815
+    },
+    {
+      "brier_score": 0.08866275867637352,
+      "description": "the COD RTO base rate falls from 26% to 15%",
+      "ece_delta": 0.05782300210136804,
+      "environment": "rto_base_rate_down",
+      "expected_calibration_error": 0.08296472721957081,
+      "flag_rate": 0.14971012845288167,
+      "n_orders": 8797,
+      "net_delta": -4405.713493423065,
+      "net_inr_per_1000": -2129.532795271115,
+      "observed_rto_rate": 0.09639649880641128,
+      "pr_auc": 0.29876168986111634,
+      "pr_auc_delta": -0.13102224558785108,
+      "pr_auc_lift": 3.0993002189955665,
+      "pr_auc_lift_delta": 0.5328928769344978,
+      "precision": 0.27790432801822323,
+      "recall": 0.43160377358490565,
+      "roc_auc": 0.7821570946386991,
+      "threshold": 0.34814814814814815
+    },
+    {
+      "brier_score": 0.11532648885330138,
+      "description": "the catalogue swings towards fashion, the highest-return category",
+      "ece_delta": 0.005481082696098791,
+      "environment": "category_mix_fashion",
+      "expected_calibration_error": 0.030622807814301562,
+      "flag_rate": 0.1944476049607464,
+      "n_orders": 8789,
+      "net_delta": 811.5425923247817,
+      "net_inr_per_1000": 3087.7232904767325,
+      "observed_rto_rate": 0.1677096370463079,
+      "pr_auc": 0.4470626615234402,
+      "pr_auc_delta": 0.017278726074472783,
+      "pr_auc_lift": 2.6656945265464826,
+      "pr_auc_lift_delta": 0.09928718448541396,
+      "precision": 0.42656524283206554,
+      "recall": 0.494572591587517,
+      "roc_auc": 0.8093924214755466,
+      "threshold": 0.34814814814814815
+    },
+    {
+      "brier_score": 0.11508708472064459,
+      "description": "the book fills with first-time customers, so history features go null",
+      "ece_delta": 0.001973176351764208,
+      "environment": "customer_mix_new",
+      "expected_calibration_error": 0.02711490146996698,
+      "flag_rate": 0.18142400730260155,
+      "n_orders": 8764,
+      "net_delta": 691.6422137604181,
+      "net_inr_per_1000": 2967.822911912369,
+      "observed_rto_rate": 0.16761752624372434,
+      "pr_auc": 0.4411287316858651,
+      "pr_auc_delta": 0.011344796236897658,
+      "pr_auc_lift": 2.631757797477823,
+      "pr_auc_lift_delta": 0.0653504554167541,
+      "precision": 0.4289308176100629,
+      "recall": 0.46426140231449964,
+      "roc_auc": 0.8079543837433529,
+      "threshold": 0.34814814814814815
+    },
+    {
+      "brier_score": 0.11658333191328421,
+      "description": "delivery mix shifts towards tier-3 pincodes",
+      "ece_delta": 0.01558499462401218,
+      "environment": "geography_tier3",
+      "expected_calibration_error": 0.04072671974221495,
+      "flag_rate": 0.214162942591956,
+      "n_orders": 8727,
+      "net_delta": 5.0155892320299245,
+      "net_inr_per_1000": 2281.1962873839807,
+      "observed_rto_rate": 0.16569267789618425,
+      "pr_auc": 0.43657825710271714,
+      "pr_auc_delta": 0.006794321653749713,
+      "pr_auc_lift": 2.634867530937353,
+      "pr_auc_lift_delta": 0.06846018887628436,
+      "precision": 0.40074906367041196,
+      "recall": 0.5179806362378977,
+      "roc_auc": 0.8022361769572866,
+      "threshold": 0.34814814814814815
+    },
+    {
+      "brier_score": 0.1176531687313871,
+      "description": "basket sizes rise; the median order value roughly doubles",
+      "ece_delta": 0.001047581544215255,
+      "environment": "order_value_up",
+      "expected_calibration_error": 0.026189306662418026,
+      "flag_rate": 0.1896551724137931,
+      "n_orders": 8758,
+      "net_delta": 584.5751821860263,
+      "net_inr_per_1000": 2860.755880337977,
+      "observed_rto_rate": 0.17115779858415164,
+      "pr_auc": 0.447878050621343,
+      "pr_auc_delta": 0.01809411517237558,
+      "pr_auc_lift": 2.616755148326699,
+      "pr_auc_lift_delta": 0.05034780626563018,
+      "precision": 0.4226369656833233,
+      "recall": 0.4683122081387592,
+      "roc_auc": 0.7999477265506756,
+      "threshold": 0.34814814814814815
+    },
+    {
+      "brier_score": 0.15767795148829195,
+      "description": "COD share, RTO base rate and fashion share all rise together, as they plausibly would during a festive peak",
+      "ece_delta": -0.010526551204424996,
+      "environment": "combined_festive",
+      "expected_calibration_error": 0.014615173913777774,
+      "flag_rate": 0.2829195744194028,
+      "n_orders": 8741,
+      "net_delta": 6991.180015725178,
+      "net_inr_per_1000": 9267.36071387713,
+      "observed_rto_rate": 0.26678869694542956,
+      "pr_auc": 0.5509580680056252,
+      "pr_auc_delta": 0.12117413255665777,
+      "pr_auc_lift": 2.065147715453332,
+      "pr_auc_lift_delta": -0.5012596266077365,
+      "precision": 0.5099069955519612,
+      "recall": 0.54073756432247,
+      "roc_auc": 0.7808095498209929,
+      "threshold": 0.34814814814814815
+    }
+  ],
+  "threshold": 0.34814814814814815
+}

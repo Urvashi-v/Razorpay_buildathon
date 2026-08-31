@@ -1,0 +1,11 @@
+environment,description,n_orders,observed_rto_rate,pr_auc,pr_auc_delta,roc_auc,brier_score,expected_calibration_error,ece_delta,flag_rate,precision,recall,net_inr_per_1000,net_delta
+reference,"the unshifted world, generated with the configured parameters",8766,0.1675,0.4298,,0.7965,0.117,0.0251,,0.1807,0.4104,0.4428,2276.18,
+cod_surge,"COD share rises from 62% to 80%, as in a festive-season shift",8782,0.2141,0.4647,0.0349,0.7602,0.1439,0.0338,0.0086,0.2477,0.4303,0.4979,4122.35,1846.17
+cod_collapse,COD share falls to 35% as prepaid adoption accelerates,8805,0.1016,0.4317,0.0019,0.8572,0.0719,0.0134,-0.0118,0.0851,0.4473,0.3743,1707.33,-568.86
+rto_base_rate_up,the COD RTO base rate rises from 26% to 38%,8767,0.2367,0.5601,0.1303,0.825,0.1382,0.0382,0.0131,0.2159,0.5478,0.4998,8730.01,6453.83
+rto_base_rate_down,the COD RTO base rate falls from 26% to 15%,8797,0.0964,0.2988,-0.131,0.7822,0.0887,0.083,0.0578,0.1497,0.2779,0.4316,-2129.53,-4405.71
+category_mix_fashion,"the catalogue swings towards fashion, the highest-return category",8789,0.1677,0.4471,0.0173,0.8094,0.1153,0.0306,0.0055,0.1944,0.4266,0.4946,3087.72,811.54
+customer_mix_new,"the book fills with first-time customers, so history features go null",8764,0.1676,0.4411,0.0113,0.808,0.1151,0.0271,0.002,0.1814,0.4289,0.4643,2967.82,691.64
+geography_tier3,delivery mix shifts towards tier-3 pincodes,8727,0.1657,0.4366,0.0068,0.8022,0.1166,0.0407,0.0156,0.2142,0.4007,0.518,2281.2,5.02
+order_value_up,basket sizes rise; the median order value roughly doubles,8758,0.1712,0.4479,0.0181,0.7999,0.1177,0.0262,0.001,0.1897,0.4226,0.4683,2860.76,584.58
+combined_festive,"COD share, RTO base rate and fashion share all rise together, as they plausibly would during a festive peak",8741,0.2668,0.551,0.1212,0.7808,0.1577,0.0146,-0.0105,0.2829,0.5099,0.5407,9267.36,6991.18

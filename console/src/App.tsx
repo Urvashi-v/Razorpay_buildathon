@@ -20,8 +20,15 @@ import EconomicSimulator from '@/pages/EconomicSimulator';
 import Evaluation from '@/pages/Evaluation';
 import OrderInvestigation from '@/pages/OrderInvestigation';
 import OrderQueue from '@/pages/OrderQueue';
+import Responsible from '@/pages/Responsible';
 
-type Screen = 'dashboard' | 'queue' | 'investigation' | 'simulator' | 'evaluation';
+type Screen =
+  | 'dashboard'
+  | 'queue'
+  | 'investigation'
+  | 'simulator'
+  | 'evaluation'
+  | 'responsible';
 
 const NAV: { id: Screen; label: string; hint: string }[] = [
   { id: 'dashboard', label: 'Dashboard', hint: 'Order book, model in service, economics' },
@@ -29,6 +36,11 @@ const NAV: { id: Screen; label: string; hint: string }[] = [
   { id: 'investigation', label: 'Investigate', hint: 'Score one order end to end' },
   { id: 'simulator', label: 'Simulator', hint: 'Change the economics, recompute the policy' },
   { id: 'evaluation', label: 'Evaluation', hint: 'Measured metrics, validation vs sealed test' },
+  {
+    id: 'responsible',
+    label: 'Fairness & drift',
+    hint: 'Cohort audit, distribution shift, monitoring',
+  },
 ];
 
 export default function App(): JSX.Element {
@@ -79,6 +91,7 @@ export default function App(): JSX.Element {
         ) : null}
         {screen === 'simulator' ? <EconomicSimulator /> : null}
         {screen === 'evaluation' ? <Evaluation /> : null}
+        {screen === 'responsible' ? <Responsible /> : null}
       </main>
 
       <footer className="app-footer">

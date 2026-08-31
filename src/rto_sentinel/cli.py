@@ -532,7 +532,7 @@ def _cmd_train(args: argparse.Namespace) -> int:
         f"\nstrongest on net rupees: {best.model_name} (rung {best.rung_id})"
         + (f" at INR {net.value:,.0f} per 1,000 orders" if net else "")
     )
-    print("every rung here is UNCALIBRATED; calibration lands in Phase 5.")
+    print("every rung here is UNCALIBRATED; `rto-sentinel final` calibrates.")
 
     if args.no_write:
         return 0
@@ -1312,6 +1312,8 @@ def _cmd_fairness(args: argparse.Namespace) -> int:
     cost_config = load_cost_model_config(settings)
     evaluation_config = load_evaluation_config(settings)
     inputs = cost_inputs_from_profile(cost_config.profiles[manifest.cost_profile])
+    min_support = args.min_support or evaluation_config.fairness.min_support_orders
+    min_flagged = args.min_flagged or evaluation_config.fairness.min_flagged_orders
 
     from rto_sentinel.decision.cost_model import outcome_economics
 
@@ -1324,7 +1326,7 @@ def _cmd_fairness(args: argparse.Namespace) -> int:
         f"\nfairness audit on {split}: {len(labels):,} orders, threshold {manifest.threshold:.4f}"
     )
     print(f"cohorts: {', '.join(cohorts.columns)}")
-    print(f"minimum support: {args.min_support} orders, {args.min_flagged} flagged\n")
+    print(f"minimum support: {min_support} orders, {min_flagged} flagged\n")
 
     all_slices: list[object] = []
     for column in cohorts.columns:
@@ -1334,8 +1336,8 @@ def _cmd_fairness(args: argparse.Namespace) -> int:
             probabilities,
             threshold=manifest.threshold,
             cohort_column=column,
-            min_support=args.min_support,
-            min_flagged=args.min_flagged,
+            min_support=min_support,
+            min_flagged=min_flagged,
             cost_false_positive_inr=economics.false_positive_cost_inr,
             saving_true_positive_inr=economics.true_positive_saving_inr,
         )
@@ -1363,8 +1365,8 @@ def _cmd_fairness(args: argparse.Namespace) -> int:
         probabilities,
         threshold=manifest.threshold,
         config=evaluation_config.fairness,
-        min_support=args.min_support,
-        min_flagged=args.min_flagged,
+        min_support=min_support,
+        min_flagged=min_flagged,
         cost_false_positive_inr=economics.false_positive_cost_inr,
         saving_true_positive_inr=economics.true_positive_saving_inr,
     )
@@ -1500,18 +1502,19 @@ def _cmd_shift(args: argparse.Namespace) -> int:
 
     print()
     print(
-        f"  {'environment':24s} {'n':>7s} {'RTO':>7s} {'PR-AUC':>8s} {'dPR':>8s} "
-        f"{'ECE':>7s} {'flag':>7s} {'prec':>7s} {'net/1k':>9s} {'dNet':>9s}"
+        f"  {'environment':24s} {'n':>7s} {'RTO':>7s} {'PR-AUC':>7s} {'lift':>7s} "
+        f"{'dLift':>7s} {'ECE':>6s} {'flag':>6s} {'prec':>6s} {'net/1k':>9s} {'dNet':>9s}"
     )
     for result in study.results:
         print(
             f"  {result.environment:24s} {result.n_orders:7,d} "
-            f"{result.observed_rto_rate:7.3f} {result.pr_auc:8.3f} "
-            f"{('       -' if result.pr_auc_delta is None else f'{result.pr_auc_delta:+8.3f}')} "
-            f"{result.expected_calibration_error:7.3f} {result.flag_rate:7.3f} "
-            f"{('    n/a' if result.precision is None else f'{result.precision:7.3f}')} "
+            f"{result.observed_rto_rate:7.3f} {result.pr_auc:7.3f} "
+            f"{result.pr_auc_lift:7.2f} "
+            f"{_or_na(result.pr_auc_lift_delta, 7, 2)} "
+            f"{result.expected_calibration_error:6.3f} {result.flag_rate:6.3f} "
+            f"{_or_na(result.precision, 6, 3)} "
             f"{result.net_inr_per_1000:9,.0f} "
-            f"{('        -' if result.net_delta is None else f'{result.net_delta:+9,.0f}')}"
+            f"{_or_na(result.net_delta, 9, 0)}"
         )
 
     print()
@@ -1772,17 +1775,19 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["validation", "test"],
         help="which scored book to audit (default: validation)",
     )
+    # Defaults of None mean "use config/evaluation.yaml", so the shipped audit
+    # and an ad-hoc one differ only where the operator said so.
     fairness_parser.add_argument(
         "--min-support",
         type=int,
-        default=100,
-        help="orders a group needs before its rates count as evidence",
+        default=None,
+        help="orders a group needs before its rates count as evidence (default: config)",
     )
     fairness_parser.add_argument(
         "--min-flagged",
         type=int,
-        default=30,
-        help="flagged orders a group needs before its precision counts as evidence",
+        default=None,
+        help="flagged orders a group needs before its precision counts (default: config)",
     )
     fairness_parser.add_argument("--no-write", action="store_true", help="skip writing artefacts")
     fairness_parser.set_defaults(func=_cmd_fairness)

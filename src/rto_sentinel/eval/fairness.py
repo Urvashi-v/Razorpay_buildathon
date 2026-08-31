@@ -523,6 +523,21 @@ def _narrative(
             "flagged more often, and equalising flag rates would make the system worse at "
             "its job while looking fairer."
         )
+        # How close it came, stated rather than left for the reader to divide.
+        #
+        # A fairness review reported only as a boolean loses the difference
+        # between "nowhere near" and "just under", and the second is the one that
+        # should change what happens at the next retrain. Reporting the margin is
+        # the cheapest possible guard against a passing audit being read as a
+        # clean bill of health.
+        if precision_trigger > 0:
+            proximity = worst_drop / precision_trigger
+            if proximity >= 0.5:
+                verdict += (
+                    f" It is, however, {proximity:.0%} of the way to the precision-drop "
+                    "trigger. That is a margin worth re-checking after the next retrain "
+                    "rather than treating as settled."
+                )
 
     caveat = (
         f" {len(below)} group(s) fell below the minimum support of {min_support} and are "

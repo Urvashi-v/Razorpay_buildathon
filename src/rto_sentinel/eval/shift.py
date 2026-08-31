@@ -12,10 +12,18 @@ Here, each environment is a **named, deliberate change to a generator parameter*
 model is not retrained. The same frozen artefact and the same frozen threshold
 face a world that moved. That is the question a deployed model actually faces.
 
-The reference environment exists so degradation is measured against something.
-It is generated with the same seed discipline as the shifted worlds and differs
-from them only in that it applies no overrides, which is why
-:class:`ShiftStudy` refuses to validate without it.
+THE REFERENCE ENVIRONMENT IS THE IID CONTROL
+============================================
+It is a fresh draw from the *unshifted* distribution, generated the same way as
+every other environment and differing only in that it applies no overrides. That
+is precisely what makes the deltas mean something: sampling variance is present
+in the reference too, so subtracting it leaves the effect of the perturbation
+rather than the effect of having generated new data at all.
+
+Comparing the shifted worlds against the original training run instead would
+confound the two, and the study would be unable to say how much of any drop was
+just a different draw. :class:`ShiftStudy` refuses to validate without the
+reference for this reason.
 
 WHY THE THRESHOLD IS HELD FIXED
 ===============================
@@ -37,7 +45,7 @@ from __future__ import annotations
 
 import copy
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -164,7 +172,7 @@ def generate_environment(
         n_customers=n_customers or max(int(spec.n_orders * 0.375), 100),
         n_orders=spec.n_orders,
         start_date=_as_datetime(start),
-        end_date=_as_datetime(start) + pd.Timedelta(days=generator_config.horizon.days - 1),
+        end_date=_as_datetime(start) + timedelta(days=generator_config.horizon.days - 1),
     )
 
     result = ConfiguredOrderGenerator().generate(shifted, params)
@@ -244,6 +252,8 @@ def evaluate_environment(
     matrix = confusion_at_threshold(labels, scores, threshold)
     ece, _ = expected_calibration_error(labels, scores)
     brier = float(np.mean((scores - labels) ** 2))
+    base_rate = float(labels.mean()) if len(labels) else 0.0
+    ranking = pr_auc(labels, scores)
 
     net = (
         (
@@ -258,8 +268,9 @@ def evaluate_environment(
         environment=data.spec.name,
         description=data.spec.description,
         n_orders=len(labels),
-        observed_rto_rate=float(labels.mean()) if len(labels) else 0.0,
-        pr_auc=pr_auc(labels, scores),
+        observed_rto_rate=base_rate,
+        pr_auc=ranking,
+        pr_auc_lift=(ranking / base_rate) if base_rate > 0 else 0.0,
         roc_auc=roc_auc(labels, scores),
         brier_score=brier,
         expected_calibration_error=ece,
@@ -326,6 +337,7 @@ def run_shift_study(
         else result.model_copy(
             update={
                 "pr_auc_delta": result.pr_auc - reference.pr_auc,
+                "pr_auc_lift_delta": result.pr_auc_lift - reference.pr_auc_lift,
                 "net_delta": result.net_inr_per_1000 - reference.net_inr_per_1000,
                 "ece_delta": (
                     result.expected_calibration_error - reference.expected_calibration_error
@@ -347,10 +359,15 @@ def run_shift_study(
     )
 
 
-#: A PR-AUC drop larger than this is called out as material. Below it the change
-#: is within the range two seeds of the same world routinely produce, so calling
-#: it degradation would be reading noise.
-MATERIAL_PR_AUC_DROP = 0.03
+#: A drop in PR-AUC *lift* larger than this is called out as material.
+#:
+#: Lift, not raw PR-AUC. A random ranker scores PR-AUC equal to the positive
+#: rate, so an environment whose base rate moved hands the model a different
+#: floor for free. Judging robustness on raw PR-AUC inverts the conclusion in
+#: exactly the environments this study cares most about: when the RTO base rate
+#: rises, raw PR-AUC rises too, and a naive reading reports "the model got better
+#: when the world got riskier".
+MATERIAL_LIFT_DROP = 0.15
 
 #: Likewise for calibration. ECE moving by more than this changes what the
 #: threshold means, which is the failure with rupee consequences.
@@ -358,22 +375,39 @@ MATERIAL_ECE_RISE = 0.02
 
 
 def summarise(results: tuple[ShiftResult, ...]) -> tuple[str, ...]:
-    """Findings, stated as what was measured rather than as a verdict."""
+    """Findings, stated as what was measured rather than as a verdict.
+
+    Rupee amounts are written as ``INR`` rather than the symbol: these strings are
+    printed to a terminal, and a Windows console in its default code page cannot
+    encode the rupee sign. The rendered report, which is written as UTF-8, uses
+    the symbol.
+    """
     findings: list[str] = []
     shifted = [result for result in results if result.environment != "reference"]
     if not shifted:
         return ("Only the reference environment was run; nothing was shifted.",)
 
+    reference = next((r for r in results if r.environment == "reference"), None)
+    if reference is not None:
+        findings.append(
+            f"Reference: PR-AUC {reference.pr_auc:.3f} at a base rate of "
+            f"{reference.observed_rto_rate:.1%}, which is a lift of "
+            f"{reference.pr_auc_lift:.2f}x over chance. Comparisons below use lift, "
+            "because raw PR-AUC is not comparable across environments whose base rates "
+            "differ - a random ranker scores PR-AUC equal to the positive rate."
+        )
+
     ranking = [
         result
         for result in shifted
-        if result.pr_auc_delta is not None and result.pr_auc_delta < -MATERIAL_PR_AUC_DROP
+        if result.pr_auc_lift_delta is not None and result.pr_auc_lift_delta < -MATERIAL_LIFT_DROP
     ]
-    for result in sorted(ranking, key=lambda entry: entry.pr_auc_delta or 0.0):
+    for result in sorted(ranking, key=lambda entry: entry.pr_auc_lift_delta or 0.0):
         findings.append(
-            f"{result.environment}: PR-AUC fell by {abs(result.pr_auc_delta or 0):.3f} "
-            f"to {result.pr_auc:.3f}. The model's ability to rank orders degraded when "
-            f"{result.description.lower()}"
+            f"{result.environment}: ranking lift fell by "
+            f"{abs(result.pr_auc_lift_delta or 0):.2f}x to {result.pr_auc_lift:.2f}x "
+            f"(raw PR-AUC {result.pr_auc:.3f} at a {result.observed_rto_rate:.1%} base "
+            f"rate). The model ranks orders less well when {result.description.lower()}"
         )
 
     miscalibrated = [
@@ -393,13 +427,13 @@ def summarise(results: tuple[ShiftResult, ...]) -> tuple[str, ...]:
     for result in losing:
         findings.append(
             f"{result.environment}: net economics turned non-positive "
-            f"(₹{result.net_inr_per_1000:,.0f} per 1,000 orders). Under this shift the "
+            f"(INR {result.net_inr_per_1000:,.0f} per 1,000 orders). Under this shift the "
             "system stops paying for itself at the frozen threshold."
         )
 
-    if not findings:
+    if not (ranking or miscalibrated or losing):
         findings.append(
-            "No environment produced a material drop in ranking quality, calibration or "
+            "No environment produced a material drop in ranking lift, calibration or "
             "economics. That is a statement about these perturbations at these "
             "magnitudes, not a general robustness claim."
         )
@@ -407,12 +441,13 @@ def summarise(results: tuple[ShiftResult, ...]) -> tuple[str, ...]:
     stable = [
         result
         for result in shifted
-        if result.pr_auc_delta is not None and abs(result.pr_auc_delta) <= MATERIAL_PR_AUC_DROP
+        if result.pr_auc_lift_delta is not None
+        and abs(result.pr_auc_lift_delta) <= MATERIAL_LIFT_DROP
     ]
     if stable:
         findings.append(
-            f"{len(stable)} of {len(shifted)} shifted environments left PR-AUC within "
-            f"{MATERIAL_PR_AUC_DROP} of the reference: "
+            f"{len(stable)} of {len(shifted)} shifted environments left ranking lift "
+            f"within {MATERIAL_LIFT_DROP}x of the reference: "
             + ", ".join(result.environment for result in stable)
             + "."
         )

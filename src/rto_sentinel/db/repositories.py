@@ -48,7 +48,6 @@ if TYPE_CHECKING:  # pragma: no cover - typing only
 
     from rto_sentinel.contracts.decision import Decision as DecisionContract
     from rto_sentinel.contracts.decision import OpsOverride
-    from rto_sentinel.contracts.orders import OrderOutcomeUpdate, OrderPayload
     from rto_sentinel.data.generator import GenerationResult
     from rto_sentinel.db.models import Decision, OpsOverrideRecord
 
@@ -472,60 +471,17 @@ class DatasetRepository:
         return int(self._session.execute(statement).scalar_one())
 
 
-class OrderRepository:
-    """Reads and writes individual orders and their outcomes (serving path)."""
-
-    def __init__(self, session: Session) -> None:
-        self._session = session
-
-    def create(self, payload: OrderPayload) -> Order:
-        raise NotImplementedError("Single-order persistence lands in Phase 4 (serving path).")
-
-    def get_order(self, order_id: str) -> Order | None:
-        return self._session.execute(
-            select(Order).where(Order.order_id == order_id)
-        ).scalar_one_or_none()
-
-    def record_outcome(self, update: OrderOutcomeUpdate) -> None:
-        """Record a terminal delivery state.
-
-        Rejects an outcome whose ``resolved_at`` precedes the order's
-        ``ordered_at``: that is not a late label, it is corrupt data, and letting
-        it through would poison every as-of aggregate computed afterwards.
-        """
-        raise NotImplementedError("Outcome ingestion lands in Phase 4 (serving path).")
-
-
-class DecisionRepository:
-    """Append-only decision log. Note the absence of an update method."""
-
-    def __init__(self, session: Session) -> None:
-        self._session = session
-
-    def append(self, decision: DecisionContract, *, config_fingerprint: str) -> Decision:
-        raise NotImplementedError("Decision logging lands in Phase 4.")
-
-    def get_latest_decision(self, order_id: str) -> Decision | None:
-        raise NotImplementedError("Decision logging lands in Phase 4.")
-
-    def list_review_queue(self, merchant_id: str, limit: int = 50) -> list[Decision]:
-        """SEVERE-band decisions awaiting a human, oldest first.
-
-        Oldest first on purpose: a queue sorted by risk score leaves the least
-        risky appeals waiting forever, and those are disproportionately the false
-        positives - the customers who did nothing wrong.
-        """
-        raise NotImplementedError("Review queue lands in Phase 4.")
-
-
-class OverrideRepository:
-    """Ops overrides. Always available, always logged."""
-
-    def __init__(self, session: Session) -> None:
-        self._session = session
-
-    def append(self, override: OpsOverride) -> None:
-        raise NotImplementedError("Override logging lands in Phase 4.")
+# `OrderRepository`, `DecisionRepository` and `OverrideRepository` were removed.
+#
+# They were Phase 1 interface sketches whose write methods all raised
+# NotImplementedError. Phase 7 built the real ones - `ServingRepository`,
+# `DecisionLogRepository` and `OpsOverrideRepository`, below - and nothing was
+# ever migrated to the sketches, so they sat exported from `db/__init__.py` as a
+# trap: `OrderRepository.get_order` worked, which made the class look live, and
+# `OrderRepository.create` raised "lands in Phase 4" from what appeared to be a
+# supported call.
+#
+# A stub that half-works is worse than no stub. Deleted rather than annotated.
 
 
 # ---------------------------------------------------------------------------

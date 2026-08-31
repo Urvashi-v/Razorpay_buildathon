@@ -58,9 +58,11 @@ Lowering ``min_support`` would restore coverage and is the wrong fix: it buys
 usable data by weakening the guard that stops a place acquiring a reputation from
 three deliveries.
 
-Expected outcome: the Phase 5 ablation study will show this family contributing
-close to nothing. That is a real result about the simulator, and it should be
-reported as one rather than engineered away.
+Expected outcome: an ablation would likely show this family contributing close
+to nothing. **That ablation has not been run** - `eval/ablation.py` is an
+unimplemented interface - so the sentence above is a prediction, not a result.
+If it is ever run, the finding should be reported as it lands rather than
+engineered away.
 """
 
 from __future__ import annotations
