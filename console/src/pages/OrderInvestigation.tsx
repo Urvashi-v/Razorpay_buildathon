@@ -77,7 +77,7 @@ export default function OrderInvestigation({ orderId, onOrderIdChange }: Props):
               id="order-id"
               type="text"
               value={draft}
-              placeholder="ORD-00008874"
+              placeholder="ORD-00043224"
               onChange={(event) => setDraft(event.target.value)}
             />
           </div>

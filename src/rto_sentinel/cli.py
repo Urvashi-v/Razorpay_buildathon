@@ -1627,6 +1627,20 @@ def _cmd_responsible_report(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_evaluation_report(args: argparse.Namespace) -> int:
+    """Render docs/evaluation_report.md from every saved measurement artefact."""
+    from rto_sentinel.eval.final_report import NoArtefactsError, render
+
+    settings = get_settings()
+    try:
+        path = render(artifact_root=settings.artifact_path)
+    except NoArtefactsError as error:
+        print(str(error), file=sys.stderr)
+        return 1
+    print(f"wrote {path}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="rto-sentinel",
@@ -1826,6 +1840,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     monitor_parser.add_argument("--no-write", action="store_true", help="skip writing artefacts")
     monitor_parser.set_defaults(func=_cmd_monitor)
+
+    evaluation_report = sub.add_parser(
+        "evaluation-report",
+        help="render docs/evaluation_report.md from every saved measurement artefact",
+    )
+    evaluation_report.set_defaults(func=_cmd_evaluation_report)
 
     responsible = sub.add_parser(
         "responsible-report",

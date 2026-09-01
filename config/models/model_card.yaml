@@ -142,9 +142,27 @@ fairness_limitations:
      flagged most - a group flagged at twice the rate with the same precision is
      being served, while the same rate with worse precision is being penalised.
      Equalising flag rates is not the goal and would not be correct."
-  - "The cohort audit is defined in config/evaluation.yaml and has not yet been
-     run as part of this phase. Until it has, no fairness claim of any kind
-     should be made about this model."
+  - "The cohort audit HAS been run - see docs/responsible_ai.md - across pincode
+     tier, order-value band, customer-history depth and payment method. It did
+     not trip the configured disparity review on either split. On the sealed test
+     set the most-flagged group came 71 percent of the way to the precision-drop
+     trigger, which is a margin to re-check at the next retrain rather than a
+     clean pass."
+  - "Tier-3 is flagged about 2.5 times as often as tier-1 and with BETTER
+     precision (0.389 against 0.327 on the sealed set), so on this benchmark the
+     model is not transferring cost onto tier-3 beyond what its accuracy
+     justifies. That is a statement about this simulator, which deliberately
+     makes tier-3 riskier via an explicit tier_risk_offset."
+  - "The cohorts examined are operational, never demographic. No gender,
+     religion, caste, ethnicity, age or income exists in this data and none is
+     inferred; eval/fairness.py refuses by name any cohort matching a sensitive
+     token. This audit therefore CANNOT answer whether any protected group is
+     disadvantaged, and no such claim should be made from it."
+  - "Cold start is the weakest cohort. First-time customers show the lowest
+     precision of any history band and are flagged least often - the model is
+     least certain exactly where it knows least - but that group fell below the
+     minimum flagged-order support, so it is reported and excluded from the
+     comparison rather than treated as evidence."
 
 distribution_shift_limitations:
   - "Evaluated over a single fixed horizon. Festival peaks, courier changes,
@@ -161,6 +179,20 @@ distribution_shift_limitations:
      with margin, courier rates and intervention effectiveness. The threshold is
      recomputed from them rather than stored, so a stale cost input silently
      produces a wrong operating point."
+  - "A controlled shift study HAS been run - see docs/responsible_ai.md - over
+     nine named generator perturbations with the model frozen and unretrained.
+     Read ranking LIFT over the base rate, not raw PR-AUC: raw PR-AUC rises when
+     the base rate rises, so it reports the arithmetic of the base rate as if it
+     were model quality."
+  - "The sharpest failure found was rto_base_rate_down, where the COD RTO rate
+     falls from 26 to 15 percent. Ranking lift IMPROVED (3.10x against a 2.57x
+     reference) while calibration error more than tripled (0.083 against 0.025)
+     and net economics turned negative (-2,130 INR per 1,000 orders at the frozen
+     threshold). Ranking survived; the fixed operating point did not."
+  - "cod_surge and combined_festive both cost about 0.4 to 0.5x of ranking lift.
+     Four of nine environments left lift within 0.15x of the reference. Those
+     nine perturbations are the ones we thought of, at the magnitudes we chose;
+     robustness against them is not robustness in general."
 
 maintenance:
   retraining_trigger: >

@@ -769,3 +769,120 @@
   color: var(--text-secondary, #c4c7c5);
   font-size: 0.9rem;
 }
+
+/* --- backend status: one line until you want more ------------------------- */
+
+.status {
+  border: 1px solid var(--border, #2a2d33);
+  border-radius: var(--radius, 6px);
+  background: var(--surface-2, #1a1d21);
+  margin-bottom: var(--space-4, 1rem);
+}
+
+.status__summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 0.5rem);
+  padding: 0.6rem 0.85rem;
+  cursor: pointer;
+  list-style: none;
+  flex-wrap: wrap;
+}
+
+/* The default disclosure marker sits badly against the pill; a rotating
+   caret of our own keeps the row on one line at narrow widths. */
+.status__summary::-webkit-details-marker {
+  display: none;
+}
+
+.status__summary::before {
+  content: '▸';
+  font-size: 0.7rem;
+  color: var(--text-muted, #9aa0a6);
+  transition: transform 120ms ease;
+}
+
+.status[open] .status__summary::before {
+  transform: rotate(90deg);
+}
+
+.status__label {
+  font-weight: 600;
+  font-size: 0.85rem;
+  letter-spacing: 0.02em;
+}
+
+.status__body {
+  padding: 0 0.85rem 0.85rem;
+  border-top: 1px solid var(--border, #2a2d33);
+  padding-top: 0.75rem;
+}
+
+.status__fingerprint {
+  margin-top: var(--space-3, 0.75rem);
+}
+
+/* --- accessibility -------------------------------------------------------- */
+
+/*
+ * A visible focus ring on every interactive element.
+ *
+ * `:focus-visible` rather than `:focus` so a mouse click does not leave a ring
+ * behind, while keyboard navigation always shows where it is. Without this the
+ * console is unusable without a mouse - the tab order exists, but nothing tells
+ * you where you are in it.
+ */
+.nav-button:focus-visible,
+.button:focus-visible,
+.status__summary:focus-visible,
+select:focus-visible,
+input:focus-visible,
+summary:focus-visible,
+details:focus-visible {
+  outline: 2px solid var(--accent, #6ea8fe);
+  outline-offset: 2px;
+  border-radius: var(--radius, 6px);
+}
+
+/*
+ * Respect a reduced-motion preference.
+ *
+ * The only motion here is the caret rotation and the loading pulse, but a
+ * vestibular trigger does not care how small the animation was.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* --- narrow viewports ----------------------------------------------------- */
+
+/*
+ * Tables are the one thing that cannot reflow. A risk console read on a phone
+ * still has to show a confusion matrix, so tables scroll inside their own
+ * container rather than forcing the page to scroll sideways.
+ */
+.table {
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+@media (max-width: 720px) {
+  .nav {
+    grid-template-columns: 1fr;
+  }
+
+  .metric-grid {
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  }
+
+  .status__summary {
+    font-size: 0.8rem;
+  }
+}

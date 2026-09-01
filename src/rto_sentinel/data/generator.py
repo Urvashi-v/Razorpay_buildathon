@@ -138,6 +138,9 @@ class DatasetRunMetadata:
     Recorded on the dataset artefact and in the ``dataset_runs`` table. Everything
     needed to regenerate the identical dataset is here: the seed, the generator
     version, the parameters, and a fingerprint of the configuration.
+
+    "Everything needed" is load-bearing and was once false. See
+    ``n_customers_requested``.
     """
 
     run_id: str
@@ -145,7 +148,20 @@ class DatasetRunMetadata:
     seed: int
     config_fingerprint: str
     config_snapshot: dict[str, Any]
+
+    #: Customers actually written. Lower than requested: activity weights are
+    #: clipped, so some drawn customers receive no orders and are not emitted.
     n_customers: int
+
+    #: Customers *asked for*, which is what `_run_id` hashes.
+    #:
+    #: Both are recorded because recording only the realised count made the
+    #: artefact unable to reproduce itself. A run requesting 20,000 customers
+    #: wrote 17,603 and stored that; regenerating from the stored value produced a
+    #: different `run_id`, and the mismatch was invisible until someone tried.
+    #: The requested figure is the reproducibility input; the realised figure
+    #: describes the data.
+    n_customers_requested: int
     n_orders: int
     start_date: datetime
     end_date: datetime
@@ -164,6 +180,7 @@ class DatasetRunMetadata:
             "config_fingerprint": self.config_fingerprint,
             "config_snapshot": self.config_snapshot,
             "n_customers": self.n_customers,
+            "n_customers_requested": self.n_customers_requested,
             "n_orders": self.n_orders,
             "start_date": self.start_date.isoformat(),
             "end_date": self.end_date.isoformat(),
@@ -1078,6 +1095,7 @@ def _assemble(
         config_fingerprint=_config_fingerprint(config),
         config_snapshot=config.model_dump(mode="json"),
         n_customers=int(customers_frame.shape[0]),
+        n_customers_requested=params.n_customers,
         n_orders=int(orders.shape[0]),
         start_date=params.start_date,
         end_date=params.end_date,

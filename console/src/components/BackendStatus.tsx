@@ -77,36 +77,50 @@ export default function BackendStatus(): JSX.Element {
   }
 
   const { data } = state;
+  const degraded = Object.entries(data.components).filter(([, c]) => !c.ready);
 
+  // Collapsed by default, and open by default when something is not ready.
+  //
+  // This used to render fully expanded and filled the entire first screen, so a
+  // merchant opening the console met four rows of infrastructure diagnostics
+  // before a single order. Health belongs one keystroke away, not in front of
+  // the product - but a degraded component still has to announce itself, which
+  // is why the default follows `data.ready` rather than being a fixed `false`.
   return (
-    <section className="card">
-      <h2>
-        Backend status {statusPill(data.ready)}{' '}
+    <details className="status" open={!data.ready}>
+      <summary className="status__summary">
+        <span className="status__label">Backend</span>
+        {statusPill(data.ready)}
         <span className="status-detail">
           v{data.version} · {data.environment}
+          {degraded.length > 0
+            ? ` · ${degraded.map(([name]) => name).join(', ')} not ready`
+            : ' · all components ready'}
         </span>
-      </h2>
+      </summary>
 
-      {Object.entries(data.components).map(([name, component]) => (
-        <div className="status-row" key={name}>
-          <span className="status-name">{name}</span>
-          {statusPill(component.ready)}
-          <span className="status-detail">{component.detail}</span>
-        </div>
-      ))}
+      <div className="status__body">
+        {Object.entries(data.components).map(([name, component]) => (
+          <div className="status-row" key={name}>
+            <span className="status-name">{name}</span>
+            {statusPill(component.ready)}
+            <span className="status-detail">{component.detail}</span>
+          </div>
+        ))}
 
-      {data.config_fingerprint ? (
-        <p className="status-detail" style={{ marginTop: 'var(--space-3)' }}>
-          Config fingerprint <code>{data.config_fingerprint.slice(0, 16)}…</code> — every result
-          this instance produces is traceable to this configuration.
-        </p>
-      ) : null}
+        {data.config_fingerprint ? (
+          <p className="status-detail status__fingerprint">
+            Config fingerprint <code>{data.config_fingerprint.slice(0, 16)}…</code> — every
+            result this instance produces is traceable to this configuration.
+          </p>
+        ) : null}
 
-      {data.warnings.map((warning) => (
-        <p className="notice" key={warning} role="status">
-          {warning}
-        </p>
-      ))}
-    </section>
+        {data.warnings.map((warning) => (
+          <p className="notice" key={warning} role="status">
+            {warning}
+          </p>
+        ))}
+      </div>
+    </details>
   );
 }

@@ -17,6 +17,9 @@ The cohort fairness audit and the robustness study now run; their results are in
 synthetic data, not evidence of production fairness or robustness**. See
 [Implementation status](#8-implementation-status).
 
+The diagrams live in [docs/architecture.md](docs/architecture.md); this document
+is the module inventory and the boundary rules.
+
 **It is not production-ready, and the reasons are specific rather than
 rhetorical.** The API has no authentication and no rate limiting; no test in this
 repository executes a real LLM call; scoring one order takes ~3 seconds because
@@ -636,6 +639,10 @@ reviewer to verify that in a minute.
 | Frontend/backend path contract test | **Implemented and passing**; response *shapes* still unverified |
 | API authentication and rate limiting | **Not implemented.** The API is open to anyone who can reach the port |
 | Real LLM round trip | **Never executed.** The transport is the one leg no test covers |
+| One-command bootstrap (`scripts/bootstrap.sh`) | **Implemented and exercised** |
+| Executable demonstration (`scripts/demo.sh`) | **Implemented and exercised** against the live system |
+| Generated evaluation report | **Implemented** — `docs/evaluation_report.md` |
+| Dataset run reproducibility from (seed, parameters) | **Verified**: re-seeding reproduced run `7b5ae86219ac7cafe45e7d51` exactly |
 | Fairness, shift and drift endpoints | **Implemented and tested**; each returns 501 with its reason until its experiment is run |
 | Agent tool contract, schemas and permission boundaries | **Implemented and tested** |
 | Read-only application toolset (6 tools) | **Implemented and tested** |
