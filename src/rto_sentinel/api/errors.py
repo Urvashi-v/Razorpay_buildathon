@@ -55,6 +55,18 @@ class ErrorCode(StrEnum):
     #: The generation named something it was not given; output withheld.
     GROUNDING_REJECTED = "GROUNDING_REJECTED"
 
+    #: No usable API key was presented. Deliberately does not distinguish a
+    #: missing key from a wrong one - telling a caller their format was right is
+    #: telling an attacker their format was right.
+    UNAUTHENTICATED = "UNAUTHENTICATED"
+    #: The caller is authenticated but the credential does not carry the power
+    #: this endpoint needs. 403, not 401 - re-checking a working key is wasted
+    #: effort.
+    FORBIDDEN = "FORBIDDEN"
+    #: The caller exceeded its per-key allowance. The detail carries the retry
+    #: delay so a client can back off rather than hammer.
+    RATE_LIMITED = "RATE_LIMITED"
+
     #: The endpoint exists and its contract is fixed, but the phase that
     #: implements it has not landed. Honest 501 rather than a plausible stub.
     NOT_IMPLEMENTED = "NOT_IMPLEMENTED"

@@ -197,6 +197,32 @@ the gap from +0.519 to +0.012.
 Selection uses a **one-standard-error rule**: among candidates within one SE of
 the best, take the smallest capacity. Ties break by trees × leaves.
 
+### What each feature family is worth
+
+Leave-one-family-out, retrained per arm, measured in **net rupees** rather than
+AUC, on validation only:
+
+| Family removed | Net ₹/1k | Δ vs full | 95% interval | Reading |
+|---|---:|---:|---:|---|
+| *(full model)* | ₹5,169 | — | — | reference |
+| `order_shape` | ₹856 | −4,313 | [−6,163, −2,510] | **earns its place** |
+| `geography_route` | ₹4,126 | −1,043 | [−1,948, −88] | **earns its place** |
+| `customer_history` | ₹4,412 | −757 | [−1,879, +472] | not established |
+| `session_intent` | ₹4,935 | −234 | [−1,063, +575] | not established |
+| `address_quality` | ₹4,996 | −173 | [−1,095, +700] | not established |
+
+Two things worth reading carefully. **`geography_route` — the highest
+fairness-risk family — does pay for itself, but its interval clears zero by only
+₹88.** That is the justification its fairness cost requires, and it is a marginal
+one.
+
+And **`session_intent` removal *improved* PR-AUC (+0.009) while costing money.**
+That is precisely why this project ranks families on rupees rather than on AUC.
+
+"Not established" is not "worthless": leave-one-out measures what a family adds
+*once every other family is present*, and overlapping signal hides individual
+value.
+
 ## 9. Calibration
 
 The decision layer compares a probability against a threshold. If the score is
@@ -454,8 +480,14 @@ prediction.
 
 **This is not production-ready.** Specifically:
 
-1. **No authentication, no rate limiting, no TLS.** Anyone who can reach the port
-   can list every order and score any of them.
+1. **Authentication, scopes, rate limiting, an access log and TLS are
+   implemented** — API keys on every `/v1` route, `read`/`write` scopes with
+   `read` as the default, a sliding per-key window that can share one counter
+   across workers via PostgreSQL, one audit line per request, and TLS
+   terminated by a reverse proxy ([docs/deployment.md](docs/deployment.md)).
+   What remains there is real but smaller: key rotation is manual, scopes are
+   two rather than per-route, and secrets come from the environment rather than
+   a secret manager.
 2. **No real LLM round trip is covered by any test.** The tool loop, grounding
    and audit are tested against real data with the transport scripted; the
    Anthropic HTTP call itself is never exercised.
@@ -465,14 +497,26 @@ prediction.
    measured. Every rupee figure inherits that.
 5. **~3 s to score one order**, because the as-of feature context is rebuilt per
    request. The model is 0.5% of that. Fine for investigation, not for checkout.
-6. **The ablation study has never been run**, so no feature family's economic
-   contribution is established.
-7. **The outcome loop is not implemented.** Measured precision decays once the
-   system acts; only the 2% control holdout keeps it measurable.
+6. **Three feature families have no established economic contribution.** The
+   ablation ran (§8b of the evaluation report): `order_shape` and
+   `geography_route` pay for themselves; `address_quality`, `customer_history`
+   and `session_intent` have intervals spanning zero. That is not evidence they
+   are worthless — leave-one-out measures marginal contribution given every other
+   family — but nothing here justifies their cost either.
+7. **The outcome loop is implemented but has no data.** The treated-vs-control
+   comparison runs against the decision log and today reports *"0 treated, 0
+   control, remains the configured ASSUMPTION"* — this system has never operated
+   on live traffic. `is_assumed` flips to False on its own once both arms reach
+   200 matured orders. Until then the 60% intervention success rate is an
+   assumption and every rupee figure inherits it.
 8. **Fairness is operational, not demographic**, and on synthetic data.
 9. **Integration tests run on SQLite**; PostgreSQL is exercised manually and by
    `seed-db`.
-10. **Frontend response *shapes*** are unverified against backend models.
+10. **Frontend response shapes are checked for field presence, not types.**
+    Every field `console/src/types/api.ts` declares must exist in the OpenAPI
+    schema, which catches the silent failure — a renamed field rendering as an
+    em-dash. A `number` declared against a schema `string` still passes; that
+    one surfaces loudly at the first render.
 
 Full detail: [docs/phase11_report.md](docs/phase11_report.md).
 
@@ -480,17 +524,18 @@ Full detail: [docs/phase11_report.md](docs/phase11_report.md).
 
 In the order that would actually matter:
 
-1. **Authentication and rate limiting.** Nothing else ships without it.
-2. **The outcome loop.** Feed realised outcomes back, measure intervention
-   effectiveness against the control holdout, and replace the two assumed rates
-   with measurements. That single change removes the largest source of
-   uncertainty in every rupee figure.
-3. **A feature store** for as-of aggregates, taking scoring from ~3 s to
+1. **Run the outcome loop on real traffic.** The measurement exists and is
+   tested; it needs ~10,000 frictioned orders to accumulate 200 controls at the
+   2% holdout rate. That single change replaces the largest assumption in every
+   rupee figure with a number.
+2. **A feature store** for as-of aggregates, taking scoring from ~3 s to
    checkout-viable.
-4. **Run the ablation**, and drop the families that do not pay.
-5. **Recalibrate on a rolling window.** The shift study showed calibration is
+3. **Separate the overlapping families.** The ablation showed three with
+   unestablished marginal contributions; a grouped or forward-selection study
+   would say whether they are redundant or genuinely idle.
+4. **Recalibrate on a rolling window.** The shift study showed calibration is
    the first thing to break and the thing that breaks the economics.
-6. **A real fairness process** — consented, legally reviewed — if this ever
+5. **A real fairness process** — consented, legally reviewed — if this ever
    touched real customers. The current audit cannot answer that question and
    does not pretend to.
 
@@ -500,6 +545,7 @@ In the order that would actually matter:
 
 | Document | Contents |
 |---|---|
+| [docs/deployment.md](docs/deployment.md) | **Running it for real.** API keys, rate limiting, TLS, and what deploying still does not solve |
 | [docs/demo.md](docs/demo.md) | **The demonstration.** Four real orders, the thirteen steps, and what to say when the interval crosses zero |
 | [docs/architecture.md](docs/architecture.md) | **The diagrams.** Decision flow, explanation flow, layer rules, request lifecycle |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Full module inventory, every boundary test, implementation status |

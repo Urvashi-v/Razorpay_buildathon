@@ -16,7 +16,7 @@
 | Cost profile | `mid_margin_d2c` |
 | Operating threshold | **0.3481** |
 | Threshold source | derived from cost inputs: C_fp=70.50, S_tp=132.00 |
-| Generated at | 2026-08-28T18:05:13.591020+00:00 |
+| Generated at | 2026-09-05T14:06:13.438571+00:00 |
 | Train rows | 23,058 (days 1-126) |
 | Evaluation rows | 2,034 (days 127-147) |
 | Evaluation positive rate | 0.1908 |

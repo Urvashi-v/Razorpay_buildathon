@@ -1,6 +1,6 @@
 {
   "selection_version": "1.0.0",
-  "frozen_at": "2026-08-29T02:17:52.499858Z",
+  "frozen_at": "2026-09-05T14:06:57.963594Z",
   "base_rung": "lightgbm",
   "chosen_candidate": "minimal",
   "chosen_params": {
@@ -44,7 +44,7 @@
         0.3968116289854894,
         0.5027890267150009
       ],
-      "train_duration_seconds": 1.8529406999587081,
+      "train_duration_seconds": 2.8234465999994427,
       "selected": false
     },
     {
@@ -65,7 +65,7 @@
         0.43368869889992223,
         0.531210435201098
       ],
-      "train_duration_seconds": 0.7353860000148416,
+      "train_duration_seconds": 0.7398628999944776,
       "selected": false
     },
     {
@@ -86,7 +86,7 @@
         0.4332146646680696,
         0.5243625821595331
       ],
-      "train_duration_seconds": 0.9548511999892071,
+      "train_duration_seconds": 1.0295566000277176,
       "selected": false
     },
     {
@@ -107,7 +107,7 @@
         0.4350637588685044,
         0.5355114972582069
       ],
-      "train_duration_seconds": 0.4850021000020206,
+      "train_duration_seconds": 0.5429038000293076,
       "selected": false
     },
     {
@@ -128,7 +128,7 @@
         0.43780453061434743,
         0.5316634370714008
       ],
-      "train_duration_seconds": 0.9938052999787033,
+      "train_duration_seconds": 1.1127747999853455,
       "selected": false
     },
     {
@@ -149,7 +149,7 @@
         0.41514694153091575,
         0.5176068102103455
       ],
-      "train_duration_seconds": 2.2262469999841414,
+      "train_duration_seconds": 2.5385790000436828,
       "selected": false
     },
     {
@@ -170,7 +170,7 @@
         0.44286019794982157,
         0.536651132161113
       ],
-      "train_duration_seconds": 0.3613333000103012,
+      "train_duration_seconds": 0.3344570000190288,
       "selected": true
     }
   ],

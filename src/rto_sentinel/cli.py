@@ -1641,6 +1641,97 @@ def _cmd_evaluation_report(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_ablation(args: argparse.Namespace) -> int:
+    """Leave-one-family-out ablation. Reads validation; never touches test."""
+    from rto_sentinel.configuration import (
+        load_cost_model_config,
+        load_evaluation_config,
+        load_features_config,
+        load_final_model_config,
+    )
+    from rto_sentinel.data.splits import assign_splits
+    from rto_sentinel.eval.ablation import run_ablation
+    from rto_sentinel.eval.responsible_report import write_ablation_artifacts
+
+    settings = get_settings()
+    params = _resolve_params(args, settings)
+    generator_config = load_generator_config(settings)
+    splits_config = load_splits_config(settings)
+    features_config = load_features_config(settings)
+    evaluation_config = load_evaluation_config(settings)
+
+    families = args.families or list(evaluation_config.ablation.families)
+    if not families:
+        print("no ablation families configured in config/evaluation.yaml", file=sys.stderr)
+        return 1
+
+    print(
+        f"generating {params.n_orders:,} orders for {params.n_customers:,} customers "
+        f"(seed {params.seed})"
+    )
+    pipeline_result = build_dataset(
+        generator_config=generator_config,
+        splits_config=splits_config,
+        params=params,
+        artifact_root=None,
+        strict=not args.lenient,
+    )
+    if not pipeline_result.ok:
+        print(pipeline_result.render(), file=sys.stderr)
+        print("dataset validation failed; refusing to ablate on it", file=sys.stderr)
+        return 1
+
+    generated = pipeline_result.dataset
+    labels = assign_splits(generated.orders, splits_config).labels
+
+    print(f"\nablating {len(families)} families, each a full retrain + calibration")
+    print("this reads train and validation only - the test split is never opened\n")
+
+    def announce(label: str) -> None:
+        name = "full model (reference)" if label == "__full__" else f"without {label}"
+        print(f"  training {name}...", flush=True)
+
+    study = run_ablation(
+        generated,
+        features_config=features_config,
+        generator_config=generator_config,
+        splits_config=splits_config,
+        final_config=load_final_model_config(settings),
+        cost_config=load_cost_model_config(settings),
+        seed=params.seed,
+        families=families,
+        split_labels=labels,
+        progress=announce,
+    )
+
+    print()
+    print(
+        f"  {'family removed':22s} {'feats':>5s} {'net/1k':>9s} {'delta':>9s} "
+        f"{'95% interval':>21s} {'PR-AUC':>7s} {'verdict':>20s}"
+    )
+    full = study.full_model
+    print(
+        f"  {'(full model)':22s} {full.n_features:5d} {full.net_inr_per_1000:9,.0f} "
+        f"{'-':>9s} {'-':>21s} {full.pr_auc:7.3f} {'reference':>20s}"
+    )
+    for arm in study.arms:
+        interval = f"[{arm.delta_ci_low:+,.0f}, {arm.delta_ci_high:+,.0f}]"
+        print(
+            f"  {arm.family_removed:22s} {arm.n_features:5d} {arm.net_inr_per_1000:9,.0f} "
+            f"{arm.delta_vs_full:+9,.0f} {interval:>21s} {arm.pr_auc:7.3f} "
+            f"{arm.verdict:>20s}"
+        )
+
+    print()
+    for finding in study.findings:
+        print(textwrap.fill(f"- {finding}", width=88, subsequent_indent="  "))
+
+    if not args.no_write:
+        for path in write_ablation_artifacts(study, artifact_root=settings.artifact_path):
+            print(f"\nwrote {path}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="rto-sentinel",
@@ -1840,6 +1931,20 @@ def build_parser() -> argparse.ArgumentParser:
     )
     monitor_parser.add_argument("--no-write", action="store_true", help="skip writing artefacts")
     monitor_parser.set_defaults(func=_cmd_monitor)
+
+    ablation = sub.add_parser(
+        "ablation",
+        help="leave-one-family-out ablation, measured in net rupees (validation only)",
+    )
+    _add_generation_arguments(ablation)
+    ablation.add_argument(
+        "--families",
+        nargs="*",
+        default=None,
+        help="families to ablate (default: those in config/evaluation.yaml)",
+    )
+    ablation.add_argument("--no-write", action="store_true", help="skip writing artefacts")
+    ablation.set_defaults(func=_cmd_ablation)
 
     evaluation_report = sub.add_parser(
         "evaluation-report",

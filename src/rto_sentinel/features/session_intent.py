@@ -6,10 +6,12 @@ impulse purchases are a documented RTO driver."
 That sentence is the honest framing and it is repeated here because it sets the
 expectation this family should be held to. Every feature here comes straight off
 the order payload, so there is no as-of question; the interesting question is
-whether they earn their place at all. A leave-one-family-out ablation would
-report that in rupees and this family is the most likely candidate for removal -
-but that ablation is not implemented, so the candidacy is a suspicion rather
-than a measurement.
+whether they earn their place at all. The leave-one-family-out ablation has now
+answered it: removing `session_intent` costs INR 234 per 1,000 orders on
+validation with an interval of [-1,063, +575], which spans zero. Its
+contribution is **not established** - and notably, removing it slightly
+*improved* PR-AUC (+0.009) while costing money, which is precisely why this
+project ranks families on rupees rather than on AUC.
 
 A NOTE ON `hour_of_day`
 =======================

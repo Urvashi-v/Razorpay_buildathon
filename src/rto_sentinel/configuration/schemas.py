@@ -593,6 +593,19 @@ class FairnessConfig(_Frozen):
     min_flagged_orders: int = Field(default=30, ge=1)
 
 
+class AblationConfig(_Frozen):
+    """Which feature families the leave-one-family-out study removes.
+
+    Typed rather than left as `dict[str, object]`. The families list is iterated
+    to build one training arm each, and an untyped dict pushed that check to
+    runtime - where a typo would have produced an ablation that silently ran
+    fewer arms than the config named.
+    """
+
+    mode: Literal["leave_one_family_out"]
+    families: list[str]
+
+
 class EvaluationConfig(_Frozen):
     version: int
     primary_metric: str
@@ -602,7 +615,7 @@ class EvaluationConfig(_Frozen):
     uncertainty: dict[str, BootstrapConfig]
     cohorts: list[str]
     fairness: FairnessConfig
-    ablation: dict[str, object]
+    ablation: AblationConfig
     forbidden: list[str]
 
     @model_validator(mode="after")

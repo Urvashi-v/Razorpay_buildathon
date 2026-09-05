@@ -113,7 +113,7 @@
     "rto_base_rate_down: net economics turned non-positive (INR -2,130 per 1,000 orders). Under this shift the system stops paying for itself at the frozen threshold.",
     "4 of 9 shifted environments left ranking lift within 0.15x of the reference: category_mix_fashion, customer_mix_new, geography_tier3, order_value_up."
   ],
-  "generated_at": "2026-08-31T13:09:23.926967Z",
+  "generated_at": "2026-09-05T14:09:57.313561Z",
   "generator_version": "1.0.0",
   "model_version": "a0d780424b79",
   "results": [

@@ -94,7 +94,7 @@
       "value": 0.5647539802833486
     }
   },
-  "recorded_at": "2026-08-28T18:04:51.785692Z",
+  "recorded_at": "2026-09-05T14:06:05.447930Z",
   "rung_id": 1,
   "rung_kind": "heuristic",
   "seed": 7,
@@ -166,7 +166,7 @@
       "true_positives": 75
     }
   ],
-  "train_duration_seconds": 2.19999928958714e-05,
+  "train_duration_seconds": 3.350002225488424e-05,
   "train_pr_auc": 0.2022669109008895,
   "train_summary": {
     "first_day": 1,
@@ -179,5 +179,5 @@
     "name": "train",
     "positive_rate": 0.16788099574984822
   },
-  "trained_at": "2026-08-28T18:04:51.770809Z"
+  "trained_at": "2026-09-05T14:06:05.447930Z"
 }

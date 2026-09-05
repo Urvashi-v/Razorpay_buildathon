@@ -30,6 +30,7 @@ import type {
   ToolCatalogueEntry,
   DriftReport,
   FairnessResponse,
+  AblationStudy,
   ShiftStudy,
 } from '@/types/api';
 
@@ -226,3 +227,11 @@ export const fetchShiftStudy = (signal?: AbortSignal): Promise<ShiftStudy> =>
 
 export const fetchDriftReport = (signal?: AbortSignal): Promise<DriftReport> =>
   get<DriftReport>('/v1/monitoring/drift', signal);
+
+/**
+ * What each feature family is worth, in net rupees.
+ *
+ * Throws `ApiError('NOT_IMPLEMENTED')` until `rto-sentinel ablation` has run.
+ */
+export const fetchAblation = (signal?: AbortSignal): Promise<AblationStudy> =>
+  get<AblationStudy>('/v1/evaluation/ablation', signal);

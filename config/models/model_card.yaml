@@ -158,6 +158,11 @@ fairness_limitations:
      inferred; eval/fairness.py refuses by name any cohort matching a sensitive
      token. This audit therefore CANNOT answer whether any protected group is
      disadvantaged, and no such claim should be made from it."
+  - "A leave-one-family-out ablation HAS been run - see docs/evaluation_report.md
+     section 8b. geography_route, the family that imposes friction on places
+     rather than on behaviour, does pay for itself (INR 1,043 per 1,000 orders on
+     validation) - but its 95 percent interval clears zero by only INR 88. That
+     is the justification its fairness cost requires, and it is a marginal one."
   - "Cold start is the weakest cohort. First-time customers show the lowest
      precision of any history band and are flagged least often - the model is
      least certain exactly where it knows least - but that group fell below the

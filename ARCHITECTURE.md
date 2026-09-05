@@ -10,8 +10,8 @@ the test is named. Where something is not built yet, it says so.
 **Status: the end-to-end path is built and running.** Data layer, feature
 pipeline, calibrated model, deterministic decision engine, FastAPI backend, agent
 layer and merchant console are implemented and tested. What remains unbuilt is
-named explicitly: the outcome loop, live drift monitoring against production
-traffic, and address repair — which is deferred with reasons rather than faked.
+named explicitly: retraining on realised outcomes, live drift monitoring against
+production traffic, and address repair — which is deferred with reasons rather than faked.
 The cohort fairness audit and the robustness study now run; their results are in
 `docs/responsible_ai.md`, and they are **controlled benchmark experiments on
 synthetic data, not evidence of production fairness or robustness**. See
@@ -21,10 +21,11 @@ The diagrams live in [docs/architecture.md](docs/architecture.md); this document
 is the module inventory and the boundary rules.
 
 **It is not production-ready, and the reasons are specific rather than
-rhetorical.** The API has no authentication and no rate limiting; no test in this
-repository executes a real LLM call; scoring one order takes ~3 seconds because
-the feature context is rebuilt from thousands of history rows per request; and
-the integration suite runs on SQLite. All of it is enumerated in
+rhetorical.** No test in this repository executes a real LLM call; scoring one
+order takes ~3 seconds because the feature context is rebuilt from thousands of
+history rows per request; the rate limiter holds its buckets in process memory,
+so a multi-worker deployment permits more than the configured rate; and the
+integration suite runs on SQLite. All of it is enumerated in
 [docs/phase11_report.md](docs/phase11_report.md).
 
 ---
@@ -634,15 +635,22 @@ reviewer to verify that in a minute.
 | End-to-end integration test (database → model → decision) | **Implemented and passing** |
 | Console: dashboard, order queue, investigation, simulator, evaluation | **Implemented and tested** |
 | Console: every displayed value sourced from a backend response | **Implemented and tested** (`OrderInvestigation.test.tsx` asserts the request URL and the rendered response) |
-| Console: fairness and drift screen | **Implemented and tested** |
+| Console: fairness, ablation and drift screen | **Implemented and tested** |
 | Integration and failure-behaviour suite (Phase 11) | **Implemented and passing** — see `docs/phase11_report.md` |
-| Frontend/backend path contract test | **Implemented and passing**; response *shapes* still unverified |
-| API authentication and rate limiting | **Not implemented.** The API is open to anyone who can reach the port |
+| Frontend/backend path contract test | **Implemented and passing** — paths, methods, and every declared response field checked against the OpenAPI schema; field *types* are not |
+| API-key authentication on every `/v1` route | **Implemented and tested**; refuses to start open in a deployed environment |
+| Per-key sliding-window rate limiting | **Implemented and tested**; `memory` backend is per process, `database` shares one counter across workers |
+| TLS termination and server-side key injection | **Implemented** as a compose overlay (`docker-compose.production.yml`) |
+| Per-key `read`/`write` scopes | **Implemented and tested**; `read` is the default, `write` guards the two routes that change stored state |
+| Request audit log | **Implemented and tested** — one line per `/v1` request, never the key |
+| Key rotation, secret manager, per-route scopes | **Not implemented** — `docs/deployment.md` §6 |
 | Real LLM round trip | **Never executed.** The transport is the one leg no test covers |
-| One-command bootstrap (`scripts/bootstrap.sh`) | **Implemented and exercised** |
+| One-command bootstrap (`scripts/bootstrap.sh`) | **Implemented and exercised end to end.** Run from scratch on 2026-09-05 it reproduced the same dataset run id, the same model hash and all 27 measured artefacts byte for byte, differing only in timestamps and wall-clock durations |
 | Executable demonstration (`scripts/demo.sh`) | **Implemented and exercised** against the live system |
 | Generated evaluation report | **Implemented** — `docs/evaluation_report.md` |
 | Dataset run reproducibility from (seed, parameters) | **Verified**: re-seeding reproduced run `7b5ae86219ac7cafe45e7d51` exactly |
+| Leave-one-family-out ablation, in net rupees | **Implemented, tested and run** — `docs/evaluation_report.md` §8b |
+| Frontend response-shape contract test | **Implemented and passing** — 21 console interfaces checked against the OpenAPI schemas |
 | Fairness, shift and drift endpoints | **Implemented and tested**; each returns 501 with its reason until its experiment is run |
 | Agent tool contract, schemas and permission boundaries | **Implemented and tested** |
 | Read-only application toolset (6 tools) | **Implemented and tested** |
@@ -657,7 +665,9 @@ reviewer to verify that in a minute.
 | Controlled distribution-shift study (9 perturbations, frozen model) | **Implemented, tested and run** |
 | Drift monitoring: feature, prediction, rate and calibration | **Implemented, tested and run** |
 | Responsible-AI report, generated from artefacts | **Implemented and generated** |
-| Outcome loop (feeding realised outcomes back into training) | **Not implemented** |
+| Outcome loop: treated-vs-control intervention measurement | **Implemented and tested**; reports insufficient data until 200 orders accumulate on each arm |
+| Override analytics by band | **Implemented and tested** |
+| Feeding realised outcomes back into *training* | **Not implemented** |
 | Live drift monitoring against production traffic | **Not implemented** — the drift module compares two windows of a stored book; wiring it to live traffic is deployment work |
 
 Unimplemented functions raise `NotImplementedError` with the phase named. They do

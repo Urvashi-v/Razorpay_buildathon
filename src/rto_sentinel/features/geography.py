@@ -58,11 +58,19 @@ Lowering ``min_support`` would restore coverage and is the wrong fix: it buys
 usable data by weakening the guard that stops a place acquiring a reputation from
 three deliveries.
 
-Expected outcome: an ablation would likely show this family contributing close
-to nothing. **That ablation has not been run** - `eval/ablation.py` is an
-unimplemented interface - so the sentence above is a prediction, not a result.
-If it is ever run, the finding should be reported as it lands rather than
-engineered away.
+Expected outcome, written before the measurement: this family would contribute
+close to nothing.
+
+**The ablation has since been run, and the prediction was wrong.** Removing
+`geography_route` costs INR 1,043 per 1,000 orders on validation, with a 95%
+interval of [-1,948, -88] - it pays for itself, which is exactly the
+justification its fairness cost requires. The margin is thin (the interval
+clears zero by INR 88), so this is a result to re-check at the next retrain
+rather than a settled one. See `docs/evaluation_report.md` section 8b.
+
+The prediction is left in place above rather than deleted: a project that
+quietly edits its expectations after seeing the data has learned nothing from
+having written them down.
 """
 
 from __future__ import annotations

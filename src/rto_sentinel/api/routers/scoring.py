@@ -27,12 +27,13 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Body, status
+from fastapi import APIRouter, Body, Depends, status
 from pydantic import BaseModel, Field
 
 from rto_sentinel.api.deps import AssessmentServiceDep
 from rto_sentinel.api.errors import ApiError, ErrorCode, ErrorResponse
 from rto_sentinel.api.routers.orders import RiskAssessmentResponse, assessment_response
+from rto_sentinel.api.security import enforce_rate_limit
 from rto_sentinel.contracts.decision import CostInputs
 from rto_sentinel.serving.assessment import OrderNotFoundError
 
@@ -40,7 +41,13 @@ from rto_sentinel.serving.assessment import OrderNotFoundError
 #: database, so this is a real cost ceiling rather than a formality.
 MAX_BATCH = 25
 
-router = APIRouter(prefix="/v1", tags=["scoring"])
+# Authentication and rate limiting apply to every route below.
+#
+# Declared on the router rather than per handler so a new endpoint is
+# protected by default. The alternative - remembering to add a dependency to
+# each one - fails silently the first time somebody forgets, and the failure
+# is an open endpoint.
+router = APIRouter(prefix="/v1", dependencies=[Depends(enforce_rate_limit)], tags=["scoring"])
 
 
 # `ScoreRequest` and `ScoreResponse` were the Phase 1 placeholders for this

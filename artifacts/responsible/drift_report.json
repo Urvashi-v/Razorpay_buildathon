@@ -17,7 +17,7 @@
   "dataset_run_id": "7b5ae86219ac7cafe45e7d51",
   "disclaimer": "Controlled benchmark experiment on synthetic data. Cohorts, shifts and drift windows are properties of the documented simulator in docs/simulator.md, not observations of real customers, real distribution shift, or real production behaviour. These results are evidence that the audit machinery works and that this model behaves a certain way on this benchmark. They are NOT evidence of production fairness or production robustness, and no such claim should be made from them.",
   "feature_version": "1.0.0",
-  "generated_at": "2026-08-31T13:08:04.622084Z",
+  "generated_at": "2026-09-05T14:09:59.800575Z",
   "labels_available": true,
   "model_version": "a0d780424b79",
   "performance": [

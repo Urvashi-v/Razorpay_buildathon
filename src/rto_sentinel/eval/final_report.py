@@ -140,6 +140,9 @@ def load_everything(artifact_root: Path) -> dict[str, Any]:
         path = responsible / f"fairness__{split}.json"
         if path.is_file():
             found[f"fairness_{split}"] = json.loads(path.read_text(encoding="utf-8"))
+    ablation_path = responsible / "ablation_study.json"
+    if ablation_path.is_file():
+        found["ablation"] = json.loads(ablation_path.read_text(encoding="utf-8"))
     if (responsible / "shift_study.json").is_file():
         found["shift"] = ShiftStudy.model_validate(
             read_contract_payload(responsible / "shift_study.json")
@@ -173,6 +176,7 @@ def render(*, artifact_root: Path, output: Path | None = None) -> Path:
     lines += _economics(found)
     lines += _baselines(found)
     lines += _fairness(found)
+    lines += _ablation(found)
     lines += _shift(found)
     lines += _drift(found)
     lines += _reading(found)
@@ -648,6 +652,52 @@ def _fairness(found: dict[str, Any]) -> list[str]:
     return lines
 
 
+def _ablation(found: dict[str, Any]) -> list[str]:
+    lines = ["## 8b. What each feature family is worth", ""]
+    study = found.get("ablation")
+    if not isinstance(study, dict):
+        lines += ["**Not run.** Run `rto-sentinel ablation`.", "", "---", ""]
+        return lines
+
+    lines += [
+        "Leave-one-family-out, **retrained per arm** and measured in net rupees "
+        "rather than AUC. A family that adds ranking quality but no money has not "
+        "earned its place.",
+        "",
+        "Validation only - an ablation is feature selection, and selecting anything "
+        "on the sealed test split is forbidden by `config/evaluation.yaml`.",
+        "",
+        "Every delta carries a **paired** bootstrap interval: both arms scored the "
+        "same orders, so resampling them independently would invent variance that is "
+        "not there. An interval spanning zero means the data cannot say the family "
+        "mattered.",
+        "",
+        "| Family removed | Features | Net ₹/1k"
+        + ASSUMPTION_MARK
+        + " | Δ vs full | 95% interval | PR-AUC | ΔPR-AUC | Verdict |",
+        "|---|---:|---:|---:|---:|---:|---:|---|",
+    ]
+    full = study["full_model"]
+    lines.append(
+        f"| *(full model)* | {full['n_features']} | "
+        f"{_rupees(full['net_inr_per_1000'])} | — | — | {full['pr_auc']:.3f} | — | "
+        "reference |"
+    )
+    for arm in study["arms"]:
+        interval = f"[{arm['delta_ci_low']:+,.0f}, {arm['delta_ci_high']:+,.0f}]"
+        lines.append(
+            f"| `{arm['family_removed']}` | {arm['n_features']} | "
+            f"{_rupees(arm['net_inr_per_1000'])} | {arm['delta_vs_full']:+,.0f} | "
+            f"{interval} | {arm['pr_auc']:.3f} | "
+            f"{arm['delta_pr_auc_vs_full']:+.3f} | {arm['verdict']} |"
+        )
+
+    lines += ["", "### Findings", ""]
+    lines += [f"- {finding}" for finding in study["findings"]]
+    lines += ["", "---", ""]
+    return lines
+
+
 def _shift(found: dict[str, Any]) -> list[str]:
     lines = ["## 9. Distribution shift", ""]
     study = found.get("shift")
@@ -765,8 +815,9 @@ def _reading(found: dict[str, Any]) -> list[str]:
         "in the data and none was inferred.",
         f"- **The rupee figures{ASSUMPTION_MARK}**, which rest on two rates that "
         "have never been measured.",
-        "- **That any feature family earns its place.** The leave-one-family-out "
-        "ablation is an unimplemented interface and has never been run.",
+        "- **That the three families with unestablished contributions are "
+        "worthless.** Leave-one-out measures marginal contribution given every "
+        "other family; overlapping signal hides individual value.",
         "",
         "Complete limitations: `docs/phase11_report.md` and `docs/responsible_ai.md`.",
         "",

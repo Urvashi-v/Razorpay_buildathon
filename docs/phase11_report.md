@@ -293,6 +293,10 @@ There is none of the second kind.
 
 ## 7. Known limitations and unresolved issues
 
+*This section records what Phase 11 found. Three of these were closed afterwards
+and are annotated in place — the finding stands as written, with what happened
+next appended, because a report edited to look better is not a report.*
+
 ### 7.1 No real LLM round trip is covered anywhere — UNRESOLVED
 
 No `ANTHROPIC_API_KEY` is configured. The agent layer refuses honestly (tested),
@@ -302,26 +306,46 @@ actual HTTP call to Anthropic.** Provider error handling is tested against a
 `FailingProvider`, not a real failure. This is a genuine hole and no test in this
 repository closes it.
 
-### 7.2 The API has no authentication and no rate limiting — UNRESOLVED
+### 7.2 The API has no authentication and no rate limiting — ~~UNRESOLVED~~ CLOSED
 
 Anyone who can reach the port can list every order and score any of them. There
 is no auth middleware, no API key, no rate limit, and `/docs`, `/redoc` and
 `/openapi.json` are open. This was never in scope for any phase, and it is the
 single largest reason the system must not be deployed as-is.
 
-### 7.3 No TLS, and no request-size limit beyond validation
+> **Closed after Phase 12.** `src/rto_sentinel/api/security.py`: API keys on
+> every `/v1` route with constant-time comparison, `read`/`write` scopes
+> defaulting to `read`, a per-key sliding window with an optional PostgreSQL
+> backend so the limit survives multiple workers, and one audit line per
+> request that never contains the key. `Settings` refuses to construct with
+> `RTO_ENV=production` and no keys, so it cannot be deployed open by accident.
+> 52 tests in `tests/api/test_security.py`. See `docs/deployment.md`.
+
+### 7.3 No TLS, and no request-size limit beyond validation — PARTLY CLOSED
 
 The API is served over plain HTTP by uvicorn with no terminating proxy in this
 repository. Combined with §7.2 that means order data crosses the network in
 clear. Body size is bounded only by Pydantic's per-field constraints; there is no
 global request-size cap.
 
-### 7.4 Frontend response *shapes* are unverified against the backend
+> **TLS closed after Phase 12** — `docker/Caddyfile` and
+> `docker-compose.production.yml` terminate TLS ahead of the app and inject the
+> console's key server-side. The application still speaks plain HTTP, which is
+> deliberate: certificate renewal and cipher policy are not application
+> concerns. **The request-size cap is still not implemented.**
+
+### 7.4 Frontend response *shapes* are unverified against the backend — CLOSED
 
 The new contract test proves every path the console requests exists and is served
 over the right method. It does **not** check that `types/api.ts` — which is
 hand-written — agrees with the response models field for field. A renamed
 response field would still ship green and render an em-dash.
+
+> **Closed after Phase 12.** `tests/api/test_frontend_types.py` parses
+> `console/src/types/api.ts` and requires every declared field to exist in the
+> OpenAPI schema. Field *types* are still unchecked — a `number` declared
+> against a schema `string` passes — because presence is where the silent
+> failure lives and a type mismatch surfaces at the first render.
 
 ### 7.5 Three-second scoring is not viable for synchronous checkout
 
@@ -344,10 +368,14 @@ run with no server. Dialect-specific behaviour is not covered.
   interval crosses zero.
 - **Intervention effectiveness and abandonment rates are assumptions**, never
   measured. Every rupee figure inherits that.
-- **The ablation study has never been run.** No feature family's economic
-  contribution is established.
-- **The outcome loop is not implemented.** Measured precision will decay once the
-  system acts, and only the 2% control holdout keeps it measurable.
+- **The ablation has since been run** (Phase 12 follow-up). Two families earn
+  their place, three are unestablished. `geography_route` clears zero by only
+  ₹88 per 1,000, which for the highest fairness-risk family is a margin to
+  re-check rather than a settled result.
+- **The outcome loop is now implemented** (Phase 12 follow-up) and reports
+  insufficient data: no interventions have been applied, so there is nothing to
+  compare. Measured precision will still decay once the system acts, and the 2%
+  control holdout is what keeps it measurable.
 - **Labels are simulated.** Absolute metric values describe this simulator.
 
 ---

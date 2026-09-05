@@ -114,19 +114,41 @@ step "7/9  Final model: hyperparameter search, calibration, frozen manifest"
 # Requires a frozen manifest and a stated reason. This is the only command in the
 # repository that opens the test split.
 step "8/9  Sealed test-set evaluation (opens the test split, once)"
-"$PY" -m rto_sentinel.cli final-test \
+#
+# ON A SECOND RUN THIS COMMAND REFUSES, AND THAT IS CORRECT.
+#
+# `final-test` will not score a sealed set that has already been opened for this
+# dataset and manifest, because scoring a held-out set repeatedly turns it into a
+# validation set. It exits non-zero to say so, and under `set -e` that would kill
+# the script two thirds of the way through a re-run.
+#
+# So the refusal is tolerated - but only when the evaluation it declines to
+# recompute is actually on disk. A missing test evaluation is a real failure and
+# still stops everything.
+if ! "$PY" -m rto_sentinel.cli final-test \
   --unseal-reason "bootstrap: model, calibration and threshold methodology frozen in the manifest" \
   --seed "$SEED" --orders "$ORDERS" --customers "$CUSTOMERS" \
   --start-date "$START_DATE" --end-date "$END_DATE"
+then
+  ls artifacts/final/*/metrics__test.json >/dev/null 2>&1 || {
+    echo "   sealed evaluation failed and no test metrics exist to fall back on"
+    exit 1
+  }
+  echo "   the sealed set was already scored for this dataset and manifest."
+  echo "   Keeping that evaluation rather than re-opening the split."
+fi
 
 # --- 9. economics, fairness, robustness, monitoring, reports -------------------
-step "9/9  Economics, fairness, distribution shift, drift, reports"
+step "9/9  Economics, ablation, fairness, distribution shift, drift, reports"
 "$PY" -m rto_sentinel.cli economics
 "$PY" -m rto_sentinel.cli fairness --split validation
 "$PY" -m rto_sentinel.cli fairness --split test
+"$PY" -m rto_sentinel.cli ablation --seed "$SEED" --orders "$ORDERS" \
+  --customers "$CUSTOMERS" --start-date "$START_DATE" --end-date "$END_DATE"
 "$PY" -m rto_sentinel.cli shift --n-orders 9000
 "$PY" -m rto_sentinel.cli monitor --split validation
 "$PY" -m rto_sentinel.cli responsible-report
+"$PY" -m rto_sentinel.cli evaluation-report
 
 # --- console dependencies -----------------------------------------------------
 if [ -d console ] && [ ! -d console/node_modules ]; then

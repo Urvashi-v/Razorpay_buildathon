@@ -1,6 +1,6 @@
 # RTO Sentinel — evaluation report
 
-Generated 2026-09-01 03:58 UTC by `rto-sentinel evaluation-report`. **Every figure is read from a saved artefact under `artifacts/`; none is written by hand.**
+Generated 2026-09-05 14:10 UTC by `rto-sentinel evaluation-report`. **Every figure is read from a saved artefact under `artifacts/`; none is written by hand.**
 
 > **The labels are simulated.** They are outcomes of the process in `docs/simulator.md`, not observations of real returns. Every metric here is a statement about that simulator. A good number means the model learned the simulator; whether the simulator resembles Indian COD commerce is a separate question this project does not claim to have settled.
 
@@ -35,7 +35,7 @@ Every artefact records all seven identifiers, so any figure below can be traced 
 | Calibration fitted on | validation (5-fold CV) |
 | Threshold | 0.3481 — derived from cost inputs: C_fp=70.50, S_tp=132.00 |
 | Cost profile | `mid_margin_d2c` |
-| Frozen at | 2026-08-29 02:17 UTC |
+| Frozen at | 2026-09-05 14:06 UTC |
 
 ### Split sizes
 
@@ -211,6 +211,34 @@ Full audit, with Wilson intervals on every rate and the support thresholds: `doc
 
 ---
 
+## 8b. What each feature family is worth
+
+Leave-one-family-out, **retrained per arm** and measured in net rupees rather than AUC. A family that adds ranking quality but no money has not earned its place.
+
+Validation only - an ablation is feature selection, and selecting anything on the sealed test split is forbidden by `config/evaluation.yaml`.
+
+Every delta carries a **paired** bootstrap interval: both arms scored the same orders, so resampling them independently would invent variance that is not there. An interval spanning zero means the data cannot say the family mattered.
+
+| Family removed | Features | Net ₹/1k† | Δ vs full | 95% interval | PR-AUC | ΔPR-AUC | Verdict |
+|---|---:|---:|---:|---:|---:|---:|---|
+| *(full model)* | 54 | ₹5,169 | — | — | 0.484 | — | reference |
+| `address_quality` | 45 | ₹4,996 | -173 | [-1,095, +700] | 0.485 | +0.000 | not established |
+| `customer_history` | 41 | ₹4,412 | -757 | [-1,879, +472] | 0.468 | -0.016 | not established |
+| `order_shape` | 45 | ₹856 | -4,313 | [-6,163, -2,510] | 0.321 | -0.164 | earns its place |
+| `session_intent` | 45 | ₹4,935 | -234 | [-1,063, +575] | 0.493 | +0.009 | not established |
+| `geography_route` | 49 | ₹4,126 | -1,043 | [-1,948, -88] | 0.475 | -0.009 | earns its place |
+
+### Findings
+
+- Full model: INR 5,169 per 1,000 orders on validation with 54 features, PR-AUC 0.484. Every delta below is against this arm, measured on the same orders.
+- order_shape: removing it moves net by INR -4,313 per 1,000 [-6,163, -2,510] - the family earns its place. PR-AUC moves -0.164.
+- geography_route: removing it moves net by INR -1,043 per 1,000 [-1,948, -88] - the family earns its place. PR-AUC moves -0.009.
+- 3 of 5 families showed no established economic effect: address_quality, customer_history, session_intent. Either the interval spans zero or the delta is under INR 66 per 1,000, which is roughly one order changing sides on this split. That is not evidence they are worthless - leave-one-out measures marginal contribution given every other family, and overlapping signal hides individual value.
+- geography_route does pay for itself here (INR +1,043 per 1,000), which is the justification its fairness cost requires - on this benchmark, against these cohorts, and no further. The interval clears zero by only INR 88, so this is a marginal result rather than a comfortable one - and for the family that imposes friction on places rather than on behaviour, marginal is worth re-checking at the next retrain rather than treating as settled.
+- customer_history is described throughout this project as the strongest honest signal, and its marginal contribution is NOT established here. That is not a contradiction: prior RTO rate is highly informative on its own, and leave-one-out asks a different question - what it adds once every other family is present. The overlap with order_shape (which carries the COD flag) is the likely explanation, and this study cannot separate them.
+
+---
+
 ## 9. Distribution shift
 
 Nine named perturbations of the generator, with the model **frozen and not retrained** and the threshold held fixed. The `reference` environment is a fresh draw from the *unshifted* distribution, so subtracting it removes sampling variance and leaves the effect of the perturbation.
@@ -286,7 +314,7 @@ Baseline 1,220 orders (1,220 matured) versus current 814 (814 matured). Labelled
 - **Anything about production.** The labels are simulated; these are statements about the simulator.
 - **Any fairness property of a protected group.** No such attribute exists in the data and none was inferred.
 - **The rupee figures†**, which rest on two rates that have never been measured.
-- **That any feature family earns its place.** The leave-one-family-out ablation is an unimplemented interface and has never been run.
+- **That the three families with unestablished contributions are worthless.** Leave-one-out measures marginal contribution given every other family; overlapping signal hides individual value.
 
 Complete limitations: `docs/phase11_report.md` and `docs/responsible_ai.md`.
 

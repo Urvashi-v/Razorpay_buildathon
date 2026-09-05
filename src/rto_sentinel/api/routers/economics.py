@@ -35,11 +35,12 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel, Field
 
 from rto_sentinel.api.deps import AppConfigDep, ScoredBookDep
 from rto_sentinel.api.errors import ApiError, ErrorCode, ErrorResponse
+from rto_sentinel.api.security import enforce_rate_limit
 from rto_sentinel.configuration.schemas import CostProfile
 from rto_sentinel.contracts.decision import CostInputs, ThresholdDerivation
 from rto_sentinel.contracts.economics import ThresholdSweep
@@ -48,7 +49,15 @@ from rto_sentinel.decision.simulation import SimulationError, SimulationResult, 
 from rto_sentinel.decision.threshold import derive_threshold
 from rto_sentinel.decision.threshold_analysis import SweepError, sweep_thresholds
 
-router = APIRouter(prefix="/v1/economics", tags=["economics"])
+# Authentication and rate limiting apply to every route below.
+#
+# Declared on the router rather than per handler so a new endpoint is
+# protected by default. The alternative - remembering to add a dependency to
+# each one - fails silently the first time somebody forgets, and the failure
+# is an open endpoint.
+router = APIRouter(
+    prefix="/v1/economics", dependencies=[Depends(enforce_rate_limit)], tags=["economics"]
+)
 
 
 class CostProfileSummary(BaseModel):

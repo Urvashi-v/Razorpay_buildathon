@@ -1,6 +1,6 @@
 # Responsible AI and robustness report
 
-Generated 2026-08-31 14:29 UTC by `rto-sentinel responsible-report`. Every number below is read from a saved artefact under `artifacts/responsible/`; none is written by hand.
+Generated 2026-09-05 14:10 UTC by `rto-sentinel responsible-report`. Every number below is read from a saved artefact under `artifacts/responsible/`; none is written by hand.
 
 > **Read this first.**
 > Controlled benchmark experiment on synthetic data.

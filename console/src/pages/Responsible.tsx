@@ -26,7 +26,12 @@
 
 import { useState } from 'react';
 
-import { fetchDriftReport, fetchFairness, fetchShiftStudy } from '@/api/endpoints';
+import {
+  fetchAblation,
+  fetchDriftReport,
+  fetchFairness,
+  fetchShiftStudy,
+} from '@/api/endpoints';
 import {
   ErrorState,
   LoadingState,
@@ -38,6 +43,8 @@ import {
 import { DASH, formatCount, formatInr, formatNumber, formatPercent } from '@/components/format';
 import { useApi } from '@/hooks/useApi';
 import type {
+  AblationArm,
+  AblationStudy,
   CohortResult,
   DriftReport,
   DriftSignal,
@@ -51,6 +58,7 @@ export default function Responsible(): JSX.Element {
   const fairness = useApi((signal) => fetchFairness(split, signal), [split]);
   const shift = useApi((signal) => fetchShiftStudy(signal), []);
   const drift = useApi((signal) => fetchDriftReport(signal), []);
+  const ablation = useApi((signal) => fetchAblation(signal), []);
 
   return (
     <div className="page">
@@ -86,6 +94,21 @@ export default function Responsible(): JSX.Element {
           />
         ) : null}
         {fairness.status === 'success' ? <Fairness data={fairness.data} /> : null}
+      </Panel>
+
+      <Panel
+        title="What each feature family is worth"
+        subtitle="Leave-one-family-out, retrained per arm, measured in net rupees rather than AUC."
+      >
+        {ablation.status === 'loading' ? <LoadingState label="Reading the ablation…" /> : null}
+        {ablation.status === 'error' ? (
+          <ErrorState
+            error={ablation.error}
+            onRetry={ablation.reload}
+            context="reading the ablation study"
+          />
+        ) : null}
+        {ablation.status === 'success' ? <Ablation data={ablation.data} /> : null}
       </Panel>
 
       <Panel
@@ -250,6 +273,115 @@ function Interval({ bounds }: { bounds: [number, number] | null }): JSX.Element 
     <span className="interval">
       [{formatNumber(bounds[0], 2)}, {formatNumber(bounds[1], 2)}]
     </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ablation
+// ---------------------------------------------------------------------------
+
+/**
+ * What each feature family contributes, in money.
+ *
+ * The verdict column comes from the backend, not from a comparison done here.
+ * "not established" means the bootstrap interval spans zero — the data cannot
+ * say the family mattered — and that is deliberately worded so it cannot be read
+ * as "contributes nothing". Overlapping families hide each other's value, and a
+ * console that rendered a red X next to `customer_history` would be asserting
+ * something this study cannot support.
+ */
+function Ablation({ data }: { data: AblationStudy }): JSX.Element {
+  return (
+    <>
+      <MetricGrid>
+        <Metric
+          label="Full model"
+          value={formatInr(data.full_model.net_inr_per_1000)}
+          hint={`${formatCount(data.full_model.n_features)} features — the reference arm`}
+          emphasis
+        />
+        <Metric label="Families ablated" value={formatCount(data.arms.length)} />
+        <Metric label="Split" value={data.split} hint="Never the sealed test set" />
+        <Metric label="Cost profile" value={data.cost_profile} />
+      </MetricGrid>
+
+      <div className="notice" role="status">
+        <p>
+          <strong>An interval that spans zero has not been shown to matter.</strong> It does
+          not mean the family contributes nothing — leave-one-out measures what a family adds{' '}
+          <em>once every other family is present</em>, so overlapping signal hides individual
+          value.
+        </p>
+      </div>
+
+      <table className="table">
+        <caption className="visually-hidden">
+          Net rupee contribution of each feature family
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">Family removed</th>
+            <th scope="col">Features</th>
+            <th scope="col">Net ₹/1k</th>
+            <th scope="col">Δ vs full</th>
+            <th scope="col">95% interval</th>
+            <th scope="col" className="muted">
+              PR-AUC
+            </th>
+            <th scope="col">Reading</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr className="row--reference">
+            <th scope="row">
+              <em>(full model)</em>
+            </th>
+            <td className="numeric">{formatCount(data.full_model.n_features)}</td>
+            <td className="numeric">{formatInr(data.full_model.net_inr_per_1000)}</td>
+            <td className="numeric">{DASH}</td>
+            <td className="numeric">{DASH}</td>
+            <td className="numeric muted">{formatNumber(data.full_model.pr_auc, 3)}</td>
+            <td>reference</td>
+          </tr>
+          {data.arms.map((arm) => (
+            <AblationRow key={arm.family_removed} arm={arm} />
+          ))}
+        </tbody>
+      </table>
+
+      <h3 className="subheading">Findings</h3>
+      <ul className="caveats">
+        {data.findings.map((finding) => (
+          <li key={finding}>{finding}</li>
+        ))}
+      </ul>
+
+      <ProvenanceNote>{data.data_provenance}</ProvenanceNote>
+    </>
+  );
+}
+
+function AblationRow({ arm }: { arm: AblationArm }): JSX.Element {
+  const established = arm.verdict === 'earns its place' || arm.verdict === 'costs money';
+  return (
+    <tr className={established ? undefined : 'row--thin'}>
+      <th scope="row">
+        <code>{arm.family_removed}</code>
+      </th>
+      <td className="numeric">{formatCount(arm.n_features)}</td>
+      <td className="numeric">{formatInr(arm.net_inr_per_1000)}</td>
+      <td className={`numeric ${arm.delta_vs_full < 0 && established ? 'bad' : ''}`}>
+        {arm.delta_vs_full >= 0 ? '+' : ''}
+        {formatInr(arm.delta_vs_full)}
+      </td>
+      <td className="numeric">
+        <span className="interval">
+          [{formatInr(arm.delta_ci_low)}, {formatInr(arm.delta_ci_high)}]
+        </span>
+      </td>
+      <td className="numeric muted">{formatNumber(arm.pr_auc, 3)}</td>
+      <td>{arm.verdict}</td>
+    </tr>
   );
 }
 

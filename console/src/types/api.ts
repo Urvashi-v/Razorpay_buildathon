@@ -635,3 +635,42 @@ export interface DriftReport {
   labels_available: boolean;
   data_provenance: string;
 }
+
+// --- ablation: what each feature family is worth ----------------------------
+
+/**
+ * One leave-one-family-out arm.
+ *
+ * `verdict` carries the reading rule, computed by the backend: an arm whose
+ * bootstrap interval spans zero is "not established", which is NOT the same as
+ * "contributes nothing". The console renders the verdict rather than
+ * re-deriving it, so there is one implementation of that judgement.
+ */
+export interface AblationArm {
+  family_removed: string;
+  n_features: number;
+  net_inr_per_1000: number;
+  delta_vs_full: number;
+  delta_ci_low: number;
+  delta_ci_high: number;
+  pr_auc: number;
+  delta_pr_auc_vs_full: number;
+  flag_rate: number;
+  precision: number | null;
+  threshold: number;
+  chosen_candidate: string;
+  calibration_method: string;
+  verdict: string;
+}
+
+export interface AblationStudy {
+  generated_at: string;
+  dataset_run_id: string;
+  split: string;
+  seed: number;
+  cost_profile: string;
+  full_model: AblationArm;
+  arms: AblationArm[];
+  findings: string[];
+  data_provenance: string;
+}

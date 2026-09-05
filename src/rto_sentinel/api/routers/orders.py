@@ -25,16 +25,23 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Path, Query, status
+from fastapi import APIRouter, Depends, Path, Query, status
 from pydantic import BaseModel, Field
 
 from rto_sentinel.api.deps import AssessmentServiceDep, ServingRepositoryDep
 from rto_sentinel.api.errors import ApiError, ErrorCode, ErrorResponse
+from rto_sentinel.api.security import enforce_rate_limit
 from rto_sentinel.contracts.enums import InterventionAction, RiskBand
 from rto_sentinel.contracts.risk import FeatureContribution
 from rto_sentinel.serving.assessment import OrderAssessment, OrderNotFoundError
 
-router = APIRouter(prefix="/v1/orders", tags=["orders"])
+# Authentication and rate limiting apply to every route below.
+#
+# Declared on the router rather than per handler so a new endpoint is
+# protected by default. The alternative - remembering to add a dependency to
+# each one - fails silently the first time somebody forgets, and the failure
+# is an open endpoint.
+router = APIRouter(prefix="/v1/orders", dependencies=[Depends(enforce_rate_limit)], tags=["orders"])
 
 #: Order ids are `ORD-` plus digits in this benchmark. Constrained rather than
 #: free text so a malformed id is a 422 with a clear message instead of a

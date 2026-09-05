@@ -1,0 +1,7 @@
+family_removed,n_features,net_inr_per_1000,delta_vs_full,delta_ci_low,delta_ci_high,pr_auc,delta_pr_auc_vs_full,flag_rate,precision,chosen_candidate,calibration_method,verdict
+__full__,54,5168.88,0.0,0.0,0.0,0.4844,0.0,0.1908,0.482,minimal,platt,reference
+address_quality,45,4996.31,-172.57,-1094.62,700.02,0.4846,0.0003,0.1819,0.4838,minimal,platt,not established
+customer_history,41,4412.24,-756.64,-1878.82,471.81,0.4684,-0.0159,0.1775,0.4709,smaller_trees,platt,not established
+order_shape,45,856.19,-4312.68,-6163.15,-2510.45,0.3206,-0.1637,0.0796,0.4012,minimal,platt,earns its place
+session_intent,45,4935.1,-233.78,-1062.79,575.44,0.4931,0.0087,0.1912,0.4756,constrained,platt,not established
+geography_route,49,4126.11,-1042.77,-1947.51,-88.03,0.4751,-0.0092,0.1844,0.4587,constrained,platt,earns its place

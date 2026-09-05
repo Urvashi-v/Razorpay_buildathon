@@ -1,0 +1,35 @@
+# TLS termination and the server-side API-key hop.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.production.yml up -d
+#
+# WHY A SEPARATE FILE RATHER THAN A PROFILE
+# -----------------------------------------
+# Compose interpolates `${VAR:?message}` for every service in a file, whatever
+# profile is selected. Putting this in the base file with required variables
+# meant a plain local `docker compose up` failed asking for a TLS domain - the
+# guard that was supposed to protect production broke development instead.
+#
+# An overlay keeps both honest: the base file needs nothing but a database
+# password, and this one refuses to start without the three values a public
+# deployment must have.
+services:
+  caddy:
+    image: caddy:2-alpine
+    depends_on: [api]
+    ports: ["80:80", "443:443"]
+    environment:
+      RTO_API_DOMAIN: ${RTO_API_DOMAIN:?set the API domain, e.g. api.example.com}
+      RTO_CONSOLE_DOMAIN: ${RTO_CONSOLE_DOMAIN:?set the console domain}
+      # The key the console's requests carry. Never reaches the browser: this is
+      # a server-side hop, which is the only arrangement where a frontend
+      # credential means anything.
+      RTO_CONSOLE_API_KEY: ${RTO_CONSOLE_API_KEY:?set the console API key}
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:

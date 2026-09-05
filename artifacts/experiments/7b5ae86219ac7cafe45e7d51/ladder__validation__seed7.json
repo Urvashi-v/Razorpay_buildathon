@@ -32,8 +32,8 @@
         "geography_route"
       ],
       "n_features": 54,
-      "trained_at": "2026-08-28T18:04:48.002342Z",
-      "train_duration_seconds": 0.000546799972653389,
+      "trained_at": "2026-09-05T14:06:04.131516Z",
+      "train_duration_seconds": 0.0002258999738842249,
       "evaluated_split": "validation",
       "split_strategy": "temporal_grouped",
       "split_pool_shares": {
@@ -183,7 +183,7 @@
       "is_calibrated": false,
       "notes": "Ship everything, flag nothing. Defines the loss the merchant currently absorbs; every later number is measured against it.",
       "data_provenance": "Synthetic benchmark data. Labels are simulated outcomes of the documented process in docs/simulator.md, not real-world ground truth. Absolute metric values are not a claim about production performance.",
-      "recorded_at": "2026-08-28T18:04:48.029106Z"
+      "recorded_at": "2026-09-05T14:06:04.131516Z"
     },
     {
       "experiment_id": "69e01a7d56080295f92a",
@@ -210,8 +210,8 @@
         "geography_route"
       ],
       "n_features": 54,
-      "trained_at": "2026-08-28T18:04:51.770809Z",
-      "train_duration_seconds": 0.0000219999928958714,
+      "trained_at": "2026-09-05T14:06:05.447930Z",
+      "train_duration_seconds": 0.00003350002225488424,
       "evaluated_split": "validation",
       "split_strategy": "temporal_grouped",
       "split_pool_shares": {
@@ -366,7 +366,7 @@
       "is_calibrated": false,
       "notes": "Blanket COD block above a value. What many merchants actually do. Usually terrible - high recall, catastrophic precision, kills GMV. Worth showing precisely how bad.",
       "data_provenance": "Synthetic benchmark data. Labels are simulated outcomes of the documented process in docs/simulator.md, not real-world ground truth. Absolute metric values are not a claim about production performance.",
-      "recorded_at": "2026-08-28T18:04:51.785692Z"
+      "recorded_at": "2026-09-05T14:06:05.447930Z"
     },
     {
       "experiment_id": "6940e0ee554dd7bb3d31",
@@ -394,8 +394,8 @@
         "geography_route"
       ],
       "n_features": 54,
-      "trained_at": "2026-08-28T18:04:55.554496Z",
-      "train_duration_seconds": 0.021484999975655228,
+      "trained_at": "2026-09-05T14:06:06.661922Z",
+      "train_duration_seconds": 0.007265000022016466,
       "evaluated_split": "validation",
       "split_strategy": "temporal_grouped",
       "split_pool_shares": {
@@ -550,7 +550,7 @@
       "is_calibrated": false,
       "notes": "The common smart heuristic. Demonstrates the fairness problem numerically and gives a real bar to beat.",
       "data_provenance": "Synthetic benchmark data. Labels are simulated outcomes of the documented process in docs/simulator.md, not real-world ground truth. Absolute metric values are not a claim about production performance.",
-      "recorded_at": "2026-08-28T18:04:55.564599Z"
+      "recorded_at": "2026-09-05T14:06:06.661922Z"
     },
     {
       "experiment_id": "4d7c1db817ff4c9c2341",
@@ -584,8 +584,8 @@
         "geography_route"
       ],
       "n_features": 54,
-      "trained_at": "2026-08-28T18:05:01.070985Z",
-      "train_duration_seconds": 1.2578412999864668,
+      "trained_at": "2026-09-05T14:06:08.755056Z",
+      "train_duration_seconds": 0.637520200049039,
       "evaluated_split": "validation",
       "split_strategy": "temporal_grouped",
       "split_pool_shares": {
@@ -775,7 +775,7 @@
       "is_calibrated": false,
       "notes": "Interpretable, fast, calibrated by construction. Surprisingly hard to beat and a genuine shipping candidate.",
       "data_provenance": "Synthetic benchmark data. Labels are simulated outcomes of the documented process in docs/simulator.md, not real-world ground truth. Absolute metric values are not a claim about production performance.",
-      "recorded_at": "2026-08-28T18:05:01.081304Z"
+      "recorded_at": "2026-09-05T14:06:08.758889Z"
     },
     {
       "experiment_id": "7b5d46d500aab95247c5",
@@ -809,8 +809,8 @@
         "geography_route"
       ],
       "n_features": 54,
-      "trained_at": "2026-08-28T18:05:13.302577Z",
-      "train_duration_seconds": 5.391954899998382,
+      "trained_at": "2026-09-05T14:06:13.341401Z",
+      "train_duration_seconds": 2.023901799984742,
       "evaluated_split": "validation",
       "split_strategy": "temporal_grouped",
       "split_pool_shares": {
@@ -1000,8 +1000,8 @@
       "is_calibrated": false,
       "notes": "The expected winner. Handles interactions and missingness natively; isotonic regression on the validation fold fixes the score distortion raw boosting produces.",
       "data_provenance": "Synthetic benchmark data. Labels are simulated outcomes of the documented process in docs/simulator.md, not real-world ground truth. Absolute metric values are not a claim about production performance.",
-      "recorded_at": "2026-08-28T18:05:13.311317Z"
+      "recorded_at": "2026-09-05T14:06:13.343430Z"
     }
   ],
-  "created_at": "2026-08-28T18:05:13.591020Z"
+  "created_at": "2026-09-05T14:06:13.438571Z"
 }

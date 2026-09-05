@@ -27,6 +27,11 @@ PY=".venv/Scripts/python.exe"
 [ -x "$PY" ] || PY=".venv/bin/python"
 API="${RTO_API:-http://127.0.0.1:8000}"
 
+# Sent on every request when set. The API runs open in development, so this is
+# empty for a local demo and required against any deployed instance.
+AUTH_HEADER=()
+[ -n "${RTO_API_KEY:-}" ] && AUTH_HEADER=(-H "X-API-Key: ${RTO_API_KEY}")
+
 # --- the four demonstration orders --------------------------------------------
 #
 # Chosen by scoring the book through the LIVE endpoint and taking one order per
@@ -47,7 +52,7 @@ curl -sf "$API/health" >/dev/null || fail "no API at $API - start uvicorn first"
 # ---------------------------------------------------------------------------
 rule "1-2.  Merchant opens the dashboard: what is actually loaded and stored"
 # ---------------------------------------------------------------------------
-curl -sf "$API/v1/monitoring/model" | "$PY" -c "
+curl -sf "${AUTH_HEADER[@]}" "$API/v1/monitoring/model" | "$PY" -c "
 import json,sys
 d=json.load(sys.stdin)
 print(f\"  model            {d['model_name']} {d['model_version']}\")
@@ -56,14 +61,14 @@ print(f\"  features         {d['n_features']} at version {d['feature_version']}\
 print(f\"  trained on       {d['training_rows']:,} rows of run {d['dataset_run_id']}\")
 " || fail "model status"
 
-curl -sf "$API/v1/monitoring/data" | "$PY" -c "
+curl -sf "${AUTH_HEADER[@]}" "$API/v1/monitoring/data" | "$PY" -c "
 import json,sys
 d=json.load(sys.stdin)
 print(f\"  orders in DB     {d['total_orders']:,}  ({d['matured_orders']:,} matured, {d['immature_orders']:,} not yet)\")
 print(f\"  observed RTO     {d['observed_rto_rate']:.1%} over matured orders only\")
 " || fail "data status"
 
-curl -sf "$API/v1/evaluation/final?split=test" | "$PY" -c "
+curl -sf "${AUTH_HEADER[@]}" "$API/v1/evaluation/final?split=test" | "$PY" -c "
 import json,sys
 d=json.load(sys.stdin)
 print(f\"  SEALED TEST      net INR {d['net_inr_per_1000_orders']:,.0f} per 1,000 orders  [{d['net_ci_low']:,.0f}, {d['net_ci_high']:,.0f}]\")
@@ -80,7 +85,7 @@ rule "3-6.  Open one order per band: probability, why, and the economic decision
 # ---------------------------------------------------------------------------
 show_order() {
   local label="$1" oid="$2"
-  curl -sf "$API/v1/orders/$oid/risk?include_contributions=true" | "$PY" -c "
+  curl -sf "${AUTH_HEADER[@]}" "$API/v1/orders/$oid/risk?include_contributions=true" | "$PY" -c "
 import json,sys
 d=json.load(sys.stdin); o=d['order']; e=d['economics']
 print(f\"  [$label]  {o['order_id']}  {o['payment_method']}  INR {o['order_value_inr']:,.0f}  {o['category']}\")
@@ -109,7 +114,7 @@ echo "  Nothing is recomputed in the browser - both numbers come from POST /v1/s
 echo
 for profile in "mid_margin_d2c:250:220:0.6:0.25:8" "thin_margin_reseller:90:180:0.55:0.30:8"; do
   IFS=: read -r name margin rto success abandon support <<< "$profile"
-  curl -sf -X POST "$API/v1/score" -H "Content-Type: application/json" -d "{
+  curl -sf "${AUTH_HEADER[@]}" -X POST "$API/v1/score" -H "Content-Type: application/json" -d "{
       \"order_id\": \"$SEVERE_ORDER\",
       \"cost_inputs\": {\"contribution_margin_inr\": $margin, \"rto_cost_inr\": $rto,
         \"intervention_success_rate\": $success, \"abandonment_on_friction\": $abandon,
@@ -134,7 +139,7 @@ NOTE
 # ---------------------------------------------------------------------------
 rule "9-11.  The investigation agent"
 # ---------------------------------------------------------------------------
-curl -sf "$API/v1/explanations/status" | "$PY" -c "
+curl -sf "${AUTH_HEADER[@]}" "$API/v1/explanations/status" | "$PY" -c "
 import json,sys
 d=json.load(sys.stdin)
 if d['available']:
@@ -148,7 +153,7 @@ else:
 "
 echo
 echo "  The six tools the agent may use, and nothing else:"
-curl -sf "$API/v1/explanations/tools" | "$PY" -c "
+curl -sf "${AUTH_HEADER[@]}" "$API/v1/explanations/tools" | "$PY" -c "
 import json,sys
 for t in json.load(sys.stdin):
     print(f\"    {t['name']:28s} {t['permission']}\")
@@ -157,12 +162,17 @@ for t in json.load(sys.stdin):
 # ---------------------------------------------------------------------------
 rule "12.  Calibration and evaluation: validation vs the sealed test set"
 # ---------------------------------------------------------------------------
-"$PY" - <<'PYEOF'
+"$PY" - <<'PYEOF' || fail "evaluation comparison"
 import json, urllib.request, os
 api = os.environ.get("RTO_API", "http://127.0.0.1:8000")
+# The key, when the instance has one. The curl steps take it from AUTH_HEADER;
+# this step builds its own request and has to attach it itself.
+key = os.environ.get("RTO_API_KEY", "")
+headers = {"X-API-Key": key} if key else {}
 rows = {}
 for split in ("validation", "test"):
-    with urllib.request.urlopen(f"{api}/v1/evaluation/final?split={split}") as r:
+    ask = urllib.request.Request(f"{api}/v1/evaluation/final?split={split}", headers=headers)
+    with urllib.request.urlopen(ask) as r:
         rows[split] = json.load(r)
 print(f"  {'metric':26s} {'validation':>22s} {'sealed test':>22s}")
 print(f"  {'':26s} {'(selection-contaminated)':>22s} {'(the honest read)':>22s}")
@@ -184,7 +194,7 @@ PYEOF
 # ---------------------------------------------------------------------------
 rule "13.  Fairness and distribution shift"
 # ---------------------------------------------------------------------------
-curl -sf "$API/v1/evaluation/fairness?split=test" | "$PY" -c "
+curl -sf "${AUTH_HEADER[@]}" "$API/v1/evaluation/fairness?split=test" | "$PY" -c "
 import json,sys
 d=json.load(sys.stdin); a=d['audit']
 print(f\"  Disparity review on the SEALED set: {'TRIGGERED' if a['triggered'] else 'not triggered'}\")
@@ -198,7 +208,7 @@ print('    Tier-3 is flagged more AND with better precision, so cost is not bein
 print('    transferred onto it beyond what accuracy justifies.')
 " || echo "  (fairness audit not run - rto-sentinel fairness --split test)"
 echo
-curl -sf "$API/v1/evaluation/shift" | "$PY" -c "
+curl -sf "${AUTH_HEADER[@]}" "$API/v1/evaluation/shift" | "$PY" -c "
 import json,sys
 d=json.load(sys.stdin)
 print('  Distribution shift, model frozen and NOT retrained:')
@@ -209,6 +219,20 @@ for r in d['results']:
 print('    rto_base_rate_down ranks BETTER and pays NEGATIVELY: ranking survived the')
 print('    shift, the fixed operating point did not. Read lift, never raw PR-AUC.')
 " || echo "  (shift study not run - rto-sentinel shift)"
+
+echo
+curl -sf "${AUTH_HEADER[@]}" "$API/v1/evaluation/ablation" | "$PY" -c "
+import json,sys
+d=json.load(sys.stdin)
+print('  What each feature family is worth (leave-one-out, net rupees, validation):')
+print(f\"    full model            INR {d['full_model']['net_inr_per_1000']:>7,.0f}  {d['full_model']['n_features']} features\")
+for a in d['arms']:
+    print(f\"    without {a['family_removed']:20s} {a['delta_vs_full']:+7,.0f}  [{a['delta_ci_low']:+6,.0f},{a['delta_ci_high']:+6,.0f}]  {a['verdict']}\")
+print()
+print('    geography_route is the highest fairness-risk family in the project. It DOES')
+print('    pay for itself - but its interval clears zero by only INR 88, so that is a')
+print('    marginal justification, not a comfortable one.')
+" || echo "  (ablation not run - rto-sentinel ablation)"
 
 rule "Done"
 cat <<'DONE'

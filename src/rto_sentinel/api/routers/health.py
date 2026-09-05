@@ -109,6 +109,36 @@ def readiness(
             ),
         )
 
+    # --- authentication --------------------------------------------------
+    # Reported so an open instance is never a surprise. Never counted toward
+    # readiness: an unauthenticated development instance is still able to score,
+    # and `Settings` already refuses to start open outside development.
+    #
+    # The key NAMES are listed; the secrets are not, and `Settings.api_keys` is
+    # deliberately not a computed field so it cannot be serialised into here by
+    # accident.
+    if settings.authentication_enabled:
+        components["authentication"] = ComponentStatus(
+            ready=True,
+            detail=(
+                f"Enabled for {len(settings.api_keys)} key(s): "
+                f"{', '.join(sorted(settings.api_keys))}. Rate limit "
+                f"{settings.rate_limit_per_minute}/min per key."
+            ),
+        )
+    else:
+        components["authentication"] = ComponentStatus(
+            ready=True,
+            detail=(
+                "DISABLED - every /v1 endpoint is open to anyone who can reach this "
+                "port. Allowed only because RTO_ENV is 'development'. Set RTO_API_KEYS "
+                "before exposing this instance to anything."
+            ),
+        )
+        warnings.append(
+            "Authentication is disabled. Any caller can list every order and score any of them."
+        )
+
     # --- database -------------------------------------------------------
     # Configuration only: no connection is opened here. A liveness or readiness
     # probe that opens a connection turns a slow database into a restart loop.

@@ -180,6 +180,74 @@ def write_shift_artifacts(study: ShiftStudy, *, artifact_root: Path) -> tuple[Pa
     return (json_path, csv_path)
 
 
+def write_ablation_artifacts(study: object, *, artifact_root: Path) -> tuple[Path, ...]:
+    """Write the ablation study as JSON and its arms as CSV.
+
+    Takes the study as ``object`` rather than importing `AblationStudy`: this
+    module is imported by the API routers, and `eval.ablation` pulls in the
+    trainer. A reporting module should not drag LightGBM into the request path.
+    """
+    from dataclasses import asdict
+
+    directory = _directory(artifact_root)
+    payload = asdict(study)  # type: ignore[call-overload]
+    payload["generated_at"] = payload["generated_at"].isoformat()
+    payload["disclaimer"] = SYNTHETIC_DISCLAIMER
+
+    # `verdict` and `interval_spans_zero` are dataclass properties, so `asdict`
+    # drops them. They are written explicitly because they encode the reading
+    # rule - "an interval spanning zero has not been shown to matter" - and a
+    # consumer recomputing that rule for itself is a second implementation of the
+    # only judgement this study makes.
+    payload["full_model"]["verdict"] = study.full_model.verdict  # type: ignore[attr-defined]
+    for stored, arm in zip(payload["arms"], study.arms, strict=True):  # type: ignore[attr-defined]
+        stored["verdict"] = arm.verdict
+        stored["interval_spans_zero"] = arm.interval_spans_zero
+
+    json_path = directory / "ablation_study.json"
+    json_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+
+    csv_path = directory / "ablation_study.csv"
+    with csv_path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(
+            [
+                "family_removed",
+                "n_features",
+                "net_inr_per_1000",
+                "delta_vs_full",
+                "delta_ci_low",
+                "delta_ci_high",
+                "pr_auc",
+                "delta_pr_auc_vs_full",
+                "flag_rate",
+                "precision",
+                "chosen_candidate",
+                "calibration_method",
+                "verdict",
+            ]
+        )
+        for arm in [study.full_model, *study.arms]:  # type: ignore[attr-defined]
+            writer.writerow(
+                [
+                    arm.family_removed,
+                    arm.n_features,
+                    _round(arm.net_inr_per_1000, 2),
+                    _round(arm.delta_vs_full, 2),
+                    _round(arm.delta_ci_low, 2),
+                    _round(arm.delta_ci_high, 2),
+                    _round(arm.pr_auc),
+                    _round(arm.delta_pr_auc_vs_full),
+                    _round(arm.flag_rate),
+                    _round(arm.precision),
+                    arm.chosen_candidate,
+                    arm.calibration_method,
+                    arm.verdict,
+                ]
+            )
+    return (json_path, csv_path)
+
+
 def write_drift_artifacts(
     report: DriftReport, *, artifact_root: Path, dataset_run_id: str
 ) -> tuple[Path, ...]:

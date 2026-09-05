@@ -13,6 +13,18 @@ is the point of it being a script rather than a document.
 **Prerequisites:** `./scripts/bootstrap.sh` has been run, the API is on `:8000`,
 and the console on `:5173` if you want to follow along visually.
 
+If the API has keys configured (`RTO_API_KEYS`), set `RTO_API_KEY` to one of
+them and the script sends it on every request. A **read** key is enough — the
+demo scores, simulates and investigates, and never records a decision:
+
+```bash
+RTO_API_KEY=sk_live_... ./scripts/demo.sh
+```
+
+Locally the API runs open, so no key is needed. The console needs one only when
+the API has them — set `RTO_API_KEY` before `npm run dev` and the Vite proxy
+attaches it server-side, keeping it out of the browser.
+
 ---
 
 ## The four demonstration orders
@@ -144,3 +156,6 @@ Most likely causes, in order:
 | Fairness or drift screen 501 | Experiment not run | `rto-sentinel fairness` / `shift` / `monitor` |
 | Agent panel disabled | No API key | Expected — see above |
 | Order not found | Database holds a different dataset run | Re-run `scripts/bootstrap.sh` |
+| Everything returns 401 | The API has keys and the caller sent none | `RTO_API_KEY=... ./scripts/demo.sh`, and set the same before `npm run dev` |
+| One request returns 403 | A read key on a write route | Expected unless you are recording a decision; that needs a `name:secret:write` key |
+| Everything returns 429 | Rate limit hit | Wait, or raise `RTO_RATE_LIMIT_PER_MINUTE` |

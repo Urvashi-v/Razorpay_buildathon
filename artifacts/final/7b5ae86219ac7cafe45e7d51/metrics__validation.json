@@ -5,7 +5,7 @@
   "evaluated_split": "validation",
   "is_calibrated": true,
   "calibration_method": "platt",
-  "evaluated_at": "2026-08-29T02:17:53.768966Z",
+  "evaluated_at": "2026-09-05T14:06:59.456275Z",
   "generator_version": "1.0.0",
   "dataset_run_id": "7b5ae86219ac7cafe45e7d51",
   "feature_version": "1.0.0",

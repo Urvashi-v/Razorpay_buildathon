@@ -44,6 +44,7 @@ EXPECTED_PATHS = {
     "/v1/evaluation/reliability",
     "/v1/evaluation/fairness",
     "/v1/evaluation/shift",
+    "/v1/evaluation/ablation",
     "/v1/monitoring/model",
     "/v1/monitoring/decisions",
     "/v1/monitoring/data",
@@ -85,7 +86,12 @@ def test_openapi_states_the_data_provenance(client: TestClient) -> None:
 
 @pytest.mark.parametrize(
     "path",
-    ["/v1/evaluation/fairness", "/v1/evaluation/shift", "/v1/monitoring/drift"],
+    [
+        "/v1/evaluation/fairness",
+        "/v1/evaluation/shift",
+        "/v1/evaluation/ablation",
+        "/v1/monitoring/drift",
+    ],
 )
 def test_endpoints_with_no_artefact_return_an_explicit_501(client: TestClient, path: str) -> None:
     """No plausible-looking placeholder data anywhere in the API.

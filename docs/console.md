@@ -20,7 +20,7 @@ production traffic.
 | **Investigation** | `/v1/orders/{id}/risk` | One order scored end to end by the real pipeline |
 | **Simulator** | `/v1/economics/cost-profiles`, `POST /v1/economics/simulate` | The backend re-derives the threshold and re-prices the book |
 | **Evaluation** | `/v1/evaluation/final`, `/v1/evaluation/ladder` | Validation and sealed test kept in separate columns |
-| **Fairness & drift** | `/v1/evaluation/fairness`, `/v1/evaluation/shift`, `/v1/monitoring/drift` | Cohort audit with intervals, the shift study, and drift that never reads as failure |
+| **Fairness & drift** | `/v1/evaluation/fairness`, `/v1/evaluation/ablation`, `/v1/evaluation/shift`, `/v1/monitoring/drift` | Cohort audit with intervals, what each feature family is worth, the shift study, and drift that never reads as failure |
 
 ---
 

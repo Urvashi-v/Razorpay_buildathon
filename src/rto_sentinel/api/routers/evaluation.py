@@ -4,6 +4,7 @@
 ``GET /v1/evaluation/reliability``  the reliability diagram bins
 ``GET /v1/evaluation/fairness``     cohort breakdown and the disparate-impact review
 ``GET /v1/evaluation/shift``        the controlled distribution-shift study
+``GET /v1/evaluation/ablation``     what each feature family is worth, in rupees
 
 THE DASHBOARD READS THESE. IT DOES NOT HOLD NUMBERS OF ITS OWN.
 ---------------------------------------------------------------
@@ -21,14 +22,16 @@ audit at all.
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from rto_sentinel.api.deps import SettingsDep
 from rto_sentinel.api.errors import ApiError, ErrorCode, ErrorResponse
+from rto_sentinel.api.security import enforce_rate_limit
 from rto_sentinel.contracts.evaluation import CalibrationMetrics, CohortResult, FairnessAudit
 from rto_sentinel.contracts.experiment import LadderResults
 from rto_sentinel.contracts.final import FinalEvaluation, SelectionManifest
@@ -36,7 +39,15 @@ from rto_sentinel.contracts.monitoring import ShiftStudy
 from rto_sentinel.eval.responsible_report import RESPONSIBLE_DIR, read_contract_payload
 from rto_sentinel.models.final import FINAL_DIR, load_evaluation, load_manifest
 
-router = APIRouter(prefix="/v1/evaluation", tags=["evaluation"])
+# Authentication and rate limiting apply to every route below.
+#
+# Declared on the router rather than per handler so a new endpoint is
+# protected by default. The alternative - remembering to add a dependency to
+# each one - fails silently the first time somebody forgets, and the failure
+# is an open endpoint.
+router = APIRouter(
+    prefix="/v1/evaluation", dependencies=[Depends(enforce_rate_limit)], tags=["evaluation"]
+)
 
 SPLITS = Annotated[str, Query(pattern=r"^(validation|test)$", description="validation | test")]
 
@@ -423,6 +434,36 @@ def fairness(settings: SettingsDep, split: SPLITS = "validation") -> FairnessRes
     # drift contracts it is a response model of this router's own, and a fairness
     # table should not reach a consumer without the sentence that qualifies it.
     return FairnessResponse.model_validate_json(path.read_text(encoding="utf-8"))
+
+
+@router.get(
+    "/ablation",
+    summary="Leave-one-family-out ablation, measured in net rupees",
+    responses={501: {"model": ErrorResponse, "description": "The ablation has not been run"}},
+)
+def ablation(settings: SettingsDep) -> dict[str, object]:
+    """What each feature family is worth, in money rather than AUC.
+
+    Returned as the artefact wrote it, including the `verdict` on each arm. An
+    arm whose bootstrap interval spans zero reads "not established" - the data
+    cannot say the family mattered - and a consumer must not present that as
+    "contributes nothing".
+
+    Measured on validation only. An ablation is feature selection, and selecting
+    on the sealed test split is forbidden by `config/evaluation.yaml`.
+    """
+    path = settings.artifact_path / RESPONSIBLE_DIR / "ablation_study.json"
+    if not path.is_file():
+        raise ApiError(
+            ErrorCode.NOT_IMPLEMENTED,
+            "The leave-one-family-out ablation has not been run. Run "
+            "`rto-sentinel ablation` to produce it. No claim about any feature "
+            "family's economic contribution is supported until it exists.",
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail={"status": "not_run"},
+        )
+    payload: dict[str, object] = json.loads(path.read_text(encoding="utf-8"))
+    return payload
 
 
 @router.get(

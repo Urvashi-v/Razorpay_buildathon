@@ -71,6 +71,7 @@ from typing import Any
 
 from sqlalchemy import (
     JSON,
+    BigInteger,
     Boolean,
     CheckConstraint,
     Float,
@@ -573,3 +574,42 @@ class ModelRun(Base, TimestampMixin):
     notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
 
     __table_args__ = (UniqueConstraint("model_name", "model_version", name="model_version_unique"),)
+
+
+class RateLimitWindow(Base):
+    """Shared per-caller request counts, so a rate limit survives multiple workers.
+
+    WHY THIS IS A TABLE AND NOT REDIS
+    ---------------------------------
+    The in-process limiter is correct for one uvicorn worker and wrong for
+    several: each keeps its own buckets, so N workers permit N times the
+    configured rate. Fixing that needs shared state, and this project already
+    runs PostgreSQL. Adding Redis for a counter would be a second datastore to
+    deploy, monitor and back up for the sake of one integer.
+
+    The cost is a round trip per request. At ~2 ms against a scoring endpoint
+    that takes ~3 s that is noise, and the backend is opt-in
+    (`RTO_RATE_LIMIT_BACKEND=database`) so a single-worker deployment pays
+    nothing.
+
+    FIXED WINDOWS, COUNTED IN PAIRS
+    -------------------------------
+    Rows are per (caller, window). A plain fixed window would let a caller spend
+    its whole allowance at 12:00:59 and again at 12:01:00 - twice the rate at
+    exactly the moment a burst is most likely - so the limiter reads the current
+    and previous windows and weights the previous one by how much of it is still
+    in view. That is the standard sliding-window-counter approximation, and it
+    keeps the same semantics as the in-memory backend.
+    """
+
+    __tablename__ = "rate_limit_windows"
+
+    caller: Mapped[str] = mapped_column(String(64), primary_key=True)
+    #: Unix epoch second at which this window opened, floored to the window size.
+    window_start: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    hits: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    __table_args__ = (
+        Index("ix_rate_limit_windows_window_start", "window_start"),
+        CheckConstraint("hits >= 0", name="ck_rate_limit_hits_non_negative"),
+    )

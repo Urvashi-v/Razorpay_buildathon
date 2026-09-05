@@ -28,6 +28,22 @@ export default defineConfig({
         target: 'http://127.0.0.1:8000',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
+        // Inject the API key SERVER-SIDE, never in the browser bundle.
+        //
+        // This is the whole reason the console does not hold a credential. A key
+        // compiled into the bundle is readable by anyone who opens dev tools, so
+        // shipping one there would look like authentication and protect nothing.
+        // The Vite dev server is a Node process, so a key set here stays out of
+        // the client. In production the equivalent is a reverse proxy that adds
+        // the same header - see docs/deployment.md.
+        //
+        // Unset in development, where the API runs open and expects no key.
+        configure: (proxy) => {
+          const key = process.env['RTO_API_KEY'];
+          if (key) {
+            proxy.on('proxyReq', (proxyReq) => proxyReq.setHeader('X-API-Key', key));
+          }
+        },
         // Bound the proxy so a backend that accepts a connection and then
         // stalls surfaces as an error state rather than an indefinite spinner.
         //

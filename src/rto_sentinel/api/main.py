@@ -11,6 +11,8 @@ one and expensive to notice later.
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -26,6 +28,7 @@ from rto_sentinel.api.routers import (
     orders,
     scoring,
 )
+from rto_sentinel.api.security import AccessLogMiddleware
 from rto_sentinel.settings import Settings, get_settings
 
 DESCRIPTION = """\
@@ -49,9 +52,30 @@ fraudulent behaviour.
 """
 
 
+def configure_logging(settings: Settings) -> None:
+    """Honour `RTO_LOG_LEVEL`, and give the access log somewhere to go.
+
+    This did not exist. `RTO_LOG_LEVEL` was a documented setting that configured
+    nothing: the root logger stayed at WARNING, so every `logger.info` in the
+    project was discarded - including, once it was added, the request audit
+    trail. A knob that does nothing is worse than no knob, because someone sets
+    it and believes the result.
+
+    `force=True` because uvicorn installs its own handlers first. Without it this
+    call is a no-op under the server and works only under the test client, which
+    is the most confusing possible outcome.
+    """
+    logging.basicConfig(
+        level=settings.log_level,
+        format="%(asctime)s %(levelname)-8s %(name)s %(message)s",
+        force=True,
+    )
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     """Build the application. Called by uvicorn and by the test suite alike."""
     settings = settings or get_settings()
+    configure_logging(settings)
 
     app = FastAPI(
         title="RTO Sentinel",
@@ -61,6 +85,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         redoc_url="/redoc",
         openapi_url="/openapi.json",
     )
+
+    # Outermost, so it records the request whatever happens inside - including a
+    # 401 from authentication and a 429 from the limiter, which are exactly the
+    # lines worth having after a credential leaks.
+    app.add_middleware(AccessLogMiddleware)
 
     app.add_middleware(
         CORSMiddleware,

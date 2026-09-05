@@ -32,6 +32,12 @@ EXPECTED_TABLES = {
     "decisions",
     "ops_overrides",
     "model_runs",
+    # operational state - not domain data
+    #
+    # The only table here that holds no orders, no customers and no decisions.
+    # It exists so a rate limit can be shared across uvicorn workers, and its
+    # rows are three integers apiece with a lifetime of two minutes.
+    "rate_limit_windows",
 }
 
 

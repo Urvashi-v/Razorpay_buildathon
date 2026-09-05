@@ -27,7 +27,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Path, Query, status
+from fastapi import APIRouter, Depends, Path, Query, status
 from pydantic import BaseModel, Field
 
 from rto_sentinel.api.deps import (
@@ -37,11 +37,20 @@ from rto_sentinel.api.deps import (
     ServingRepositoryDep,
 )
 from rto_sentinel.api.errors import ApiError, ErrorCode, ErrorResponse
+from rto_sentinel.api.security import WriteDep, enforce_rate_limit
 from rto_sentinel.contracts.enums import InterventionAction, OverrideDirection, RiskBand, band_rank
 from rto_sentinel.db.repositories import split_reason_codes
 from rto_sentinel.serving.assessment import OrderNotFoundError
 
-router = APIRouter(prefix="/v1/decisions", tags=["decisions"])
+# Authentication and rate limiting apply to every route below.
+#
+# Declared on the router rather than per handler so a new endpoint is
+# protected by default. The alternative - remembering to add a dependency to
+# each one - fails silently the first time somebody forgets, and the failure
+# is an open endpoint.
+router = APIRouter(
+    prefix="/v1/decisions", dependencies=[Depends(enforce_rate_limit)], tags=["decisions"]
+)
 
 OrderIdPath = Annotated[
     str,
@@ -156,11 +165,13 @@ def _record(row: object) -> DecisionRecord:
     status_code=status.HTTP_201_CREATED,
     summary="Score an order, take the economic decision, and log it",
     responses={
+        403: {"model": ErrorResponse, "description": "Key lacks the write scope"},
         404: {"model": ErrorResponse, "description": "No such order"},
         503: {"model": ErrorResponse, "description": "No calibrated model artefact loaded"},
     },
 )
 def decide(
+    _write: WriteDep,
     request: DecideRequest,
     service: AssessmentServiceDep,
     repository: ServingRepositoryDep,
@@ -234,11 +245,13 @@ def get_decision(order_id: OrderIdPath, log: DecisionLogDep) -> DecisionRecord:
     status_code=status.HTTP_201_CREATED,
     summary="Record a human override of the engine's recommendation",
     responses={
+        403: {"model": ErrorResponse, "description": "Key lacks the write scope"},
         404: {"model": ErrorResponse, "description": "No decision to override"},
         422: {"model": ErrorResponse, "description": "Override does not change the band"},
     },
 )
 def override_decision(
+    _write: WriteDep,
     request: OverrideRequest,
     log: DecisionLogDep,
     overrides: OverrideRepositoryDep,

@@ -32,7 +32,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Path, Query, status
+from fastapi import APIRouter, Depends, Path, Query, status
 from pydantic import BaseModel
 
 from rto_sentinel.agents.address_repair import DEFERRAL_REASON
@@ -53,6 +53,7 @@ from rto_sentinel.api.deps import (
     LLMProviderDep,
 )
 from rto_sentinel.api.errors import ApiError, ErrorCode, ErrorResponse
+from rto_sentinel.api.security import enforce_rate_limit
 from rto_sentinel.contracts.explanation import (
     ConfirmationMessage,
     Explanation,
@@ -62,7 +63,15 @@ from rto_sentinel.contracts.explanation import (
 from rto_sentinel.decision.reason_codes import derive_reason_codes
 from rto_sentinel.serving.assessment import OrderNotFoundError
 
-router = APIRouter(prefix="/v1/explanations", tags=["explanations"])
+# Authentication and rate limiting apply to every route below.
+#
+# Declared on the router rather than per handler so a new endpoint is
+# protected by default. The alternative - remembering to add a dependency to
+# each one - fails silently the first time somebody forgets, and the failure
+# is an open endpoint.
+router = APIRouter(
+    prefix="/v1/explanations", dependencies=[Depends(enforce_rate_limit)], tags=["explanations"]
+)
 
 OrderIdPath = Annotated[str, Path(pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$", max_length=64)]
 

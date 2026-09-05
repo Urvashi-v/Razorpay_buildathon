@@ -1,0 +1,64 @@
+# TLS termination, and the server-side hop that holds the API key.
+#
+# WHY A PROXY AND NOT UVICORN'S OWN TLS
+# ------------------------------------
+# Uvicorn can terminate TLS. Then certificate renewal, cipher policy and HTTP/2
+# become application concerns, and the app has to restart to pick up a new
+# certificate. Caddy renews without a cron entry and without touching the app.
+#
+# WHY THE KEY IS INJECTED HERE
+# ---------------------------
+# A key compiled into the console bundle is readable by anyone who opens dev
+# tools - it would look like authentication and protect nothing. This is a
+# server-side hop, so the browser never sees the credential. It is the same job
+# the Vite dev proxy does locally.
+#
+# Set in the environment, never in this file:
+#   RTO_CONSOLE_DOMAIN, RTO_API_DOMAIN, RTO_CONSOLE_API_KEY
+
+{$RTO_API_DOMAIN} {
+	encode zstd gzip
+
+	# The API is reached directly by server-to-server callers, which carry their
+	# own keys. Nothing is injected here - a proxy that added a key would hand
+	# every anonymous caller a valid credential.
+	reverse_proxy api:8000 {
+		header_up X-Forwarded-Proto {scheme}
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options    "nosniff"
+		X-Frame-Options           "DENY"
+		Referrer-Policy           "no-referrer"
+		-Server
+	}
+}
+
+{$RTO_CONSOLE_DOMAIN} {
+	encode zstd gzip
+
+	# Console API calls: attach the key server-side, then forward.
+	handle /api/* {
+		uri strip_prefix /api
+		reverse_proxy api:8000 {
+			header_up X-API-Key       {$RTO_CONSOLE_API_KEY}
+			header_up X-Forwarded-Proto {scheme}
+		}
+	}
+
+	# The built static console.
+	handle {
+		root * /srv/console
+		try_files {path} /index.html
+		file_server
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options    "nosniff"
+		X-Frame-Options           "DENY"
+		Referrer-Policy           "no-referrer"
+		-Server
+	}
+}

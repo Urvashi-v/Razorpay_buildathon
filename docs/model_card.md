@@ -11,7 +11,7 @@
 | Model | `lightgbm` + `platt` calibration |
 | Model version | `a0d780424b79` |
 | Selection manifest | `4f17cd1f1279d897d589` |
-| Frozen at | 2026-08-29T02:17:52.499858+00:00 |
+| Frozen at | 2026-09-05T14:06:57.963594+00:00 |
 | Owner | RTO Sentinel project (Razorpay hiring challenge, Track 02) |
 | Feature version | `1.0.0` |
 | Feature fingerprint | `798aef57ad3cefe9...` |
@@ -63,7 +63,6 @@ What the data does not contain:
 |---|---|---|---|---|---|
 | train | 23,058 | 0.1679 | 1-126 | 2025-09-01 | 2026-01-04 |
 | validation | 2,034 | 0.1908 | 127-147 | 2026-01-05 | 2026-01-25 |
-| test | 1,698 | 0.1567 | 148-178 | 2026-01-26 | 2026-02-25 |
 
 ## Features
 
@@ -107,40 +106,34 @@ Splits are temporal windows inside disjoint customer pools: a customer appears i
 
 ## Measured results
 
-> **The validation column is optimistic and is shown for comparison only.** Hyperparameters were chosen on validation and the shipped calibrator was refitted on it, so those rows describe data the model was tuned against. The test column is the honest measurement.
+> **The validation column is optimistic and is shown for comparison only.** Hyperparameters were chosen on validation and the shipped calibrator was refitted on it, so those rows describe data the model was tuned against. No test-set measurement exists yet.
 
-| Metric | validation | test |
-|---|---|---|
-| Rows | 2,034 | 1,698 |
-| Positive rate | 0.1908 | 0.1567 |
-| PR-AUC | **0.484** [0.439, 0.536] | **0.365** [0.315, 0.426] |
-| PR-AUC, uncalibrated | 0.484 | 0.365 |
-| ROC-AUC | 0.806 [0.785, 0.827] | 0.781 [0.755, 0.807] |
-| Recall @ precision 80% | 0.036 | — |
-| Recall @ precision 90% | 0.010 | — |
-| Brier score | 0.1239 | 0.1162 |
-| Brier, uncalibrated | 0.1247 | 0.1152 |
-| Expected calibration error | 0.0136 | 0.0290 |
-| ECE, uncalibrated | 0.0285 | 0.0175 |
-| Operating threshold | 0.3481 | 0.3481 |
-| Flag rate | 0.191 | 0.159 |
-| Precision | 0.482 | 0.370 |
-| Recall | 0.482 | 0.376 |
-| F1 | 0.482 | 0.373 |
-| Confusion (TP / FP / FN / TN) | 187 / 201 / 201 / 1,445 | 100 / 170 / 166 / 1,262 |
-| Net INR saved per 1,000 orders | **5,169** [3,279, 7,173] | **716** [-1,009, 2,603] |
-| False-positive cost, INR | 14,170 | 11,985 |
-| Do-nothing loss absorbed, INR/1k | 41,967 | 34,464 |
-
-The sealed test split was opened once, after the manifest was frozen. Stated reason: *Phase 5 final evaluation. Model selection (candidate 'minimal'), calibration selection (Platt, cross-validated on validation) and threshold methodology (cost-derived, 0.3481) were frozen in manifest 4f17cd1f1279d897d589 before this command was run.*
+| Metric | validation |
+|---|---|
+| Rows | 2,034 |
+| Positive rate | 0.1908 |
+| PR-AUC | **0.484** [0.439, 0.536] |
+| PR-AUC, uncalibrated | 0.484 |
+| ROC-AUC | 0.806 [0.785, 0.827] |
+| Recall @ precision 80% | 0.036 |
+| Recall @ precision 90% | 0.010 |
+| Brier score | 0.1239 |
+| Brier, uncalibrated | 0.1247 |
+| Expected calibration error | 0.0136 |
+| ECE, uncalibrated | 0.0285 |
+| Operating threshold | 0.3481 |
+| Flag rate | 0.191 |
+| Precision | 0.482 |
+| Recall | 0.482 |
+| F1 | 0.482 |
+| Confusion (TP / FP / FN / TN) | 187 / 201 / 201 / 1,445 |
+| Net INR saved per 1,000 orders | **5,169** [3,279, 7,173] |
+| False-positive cost, INR | 14,170 |
+| Do-nothing loss absorbed, INR/1k | 41,967 |
 
 ## What the measurement shows
 
-**No saving can be claimed at 95% confidence.** The point estimate is net INR 716 per 1,000 orders, but the interval [-1,009, 2,603] crosses zero: on 1,698 sealed orders this measurement cannot distinguish the model from doing nothing. That is a statement about the evidence, not a claim that the model is worthless - but it is the honest reading, and a larger held-out sample is what would settle it.
-
-**Calibration did not transfer to the sealed set.** Expected calibration error is 0.0290 calibrated against 0.0175 raw, and the Brier score agrees in direction (0.1162 against 0.1152) - so the `platt` mapping, fitted on the validation window, makes the probabilities slightly *worse* on the later window rather than better. Both errors are small in absolute terms and the reliability diagram shows the two curves close together, so this is a failure to help rather than a collapse. It is nonetheless the distribution-shift limitation listed below, measured rather than predicted: the mapping encodes the validation window's score-to-frequency relationship, and that relationship moved. It is the argument for recalibrating on recent matured outcomes rather than shipping a mapping fitted once.
-
-**The drop from validation to test is partly arithmetic.** PR-AUC falls 0.120, but the positive rate also falls 0.0341 (0.1908 to 0.1567), and PR-AUC is bounded below by the base rate. Measured as lift over the base rate the model achieves 2.54x on validation and 2.33x on test; ROC-AUC, which does not move with the base rate, goes 0.806 to 0.781. Ranking quality degraded, but by considerably less than the headline difference suggests. The remainder is what selecting on validation cost.
+No sealed-set evaluation exists yet, so no claim about this model's performance on unseen data can be made. The validation numbers above describe data the model was selected on.
 
 ## Against the baseline ladder
 
@@ -174,6 +167,7 @@ Every rung below was measured on the same validation split, at the same cost-der
 - The cohort audit HAS been run - see docs/responsible_ai.md - across pincode tier, order-value band, customer-history depth and payment method. It did not trip the configured disparity review on either split. On the sealed test set the most-flagged group came 71 percent of the way to the precision-drop trigger, which is a margin to re-check at the next retrain rather than a clean pass.
 - Tier-3 is flagged about 2.5 times as often as tier-1 and with BETTER precision (0.389 against 0.327 on the sealed set), so on this benchmark the model is not transferring cost onto tier-3 beyond what its accuracy justifies. That is a statement about this simulator, which deliberately makes tier-3 riskier via an explicit tier_risk_offset.
 - The cohorts examined are operational, never demographic. No gender, religion, caste, ethnicity, age or income exists in this data and none is inferred; eval/fairness.py refuses by name any cohort matching a sensitive token. This audit therefore CANNOT answer whether any protected group is disadvantaged, and no such claim should be made from it.
+- A leave-one-family-out ablation HAS been run - see docs/evaluation_report.md section 8b. geography_route, the family that imposes friction on places rather than on behaviour, does pay for itself (INR 1,043 per 1,000 orders on validation) - but its 95 percent interval clears zero by only INR 88. That is the justification its fairness cost requires, and it is a marginal one.
 - Cold start is the weakest cohort. First-time customers show the lowest precision of any history band and are flagged least often - the model is least certain exactly where it knows least - but that group fell below the minimum flagged-order support, so it is reported and excluded from the comparison rather than treated as evidence.
 
 ## Distribution-shift limitations

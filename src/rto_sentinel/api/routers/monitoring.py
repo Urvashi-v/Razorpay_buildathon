@@ -30,7 +30,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
@@ -42,11 +42,20 @@ from rto_sentinel.api.deps import (
     SettingsDep,
 )
 from rto_sentinel.api.errors import ApiError, ErrorCode, ErrorResponse
+from rto_sentinel.api.security import enforce_rate_limit
 from rto_sentinel.contracts.monitoring import DriftReport
 from rto_sentinel.db.models import DatasetRun, Order, OrderOutcomeRecord
 from rto_sentinel.eval.responsible_report import RESPONSIBLE_DIR, read_contract_payload
 
-router = APIRouter(prefix="/v1/monitoring", tags=["monitoring"])
+# Authentication and rate limiting apply to every route below.
+#
+# Declared on the router rather than per handler so a new endpoint is
+# protected by default. The alternative - remembering to add a dependency to
+# each one - fails silently the first time somebody forgets, and the failure
+# is an open endpoint.
+router = APIRouter(
+    prefix="/v1/monitoring", dependencies=[Depends(enforce_rate_limit)], tags=["monitoring"]
+)
 
 
 class ModelStatusResponse(BaseModel):
